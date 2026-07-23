@@ -1,0 +1,64 @@
+{
+  "localeSwitcher": {
+    "label": "Sprache",
+    "en": "English",
+    "de": "Deutsch",
+    "ga": "Gaeilge"
+  },
+  "nav": {
+    "signIn": "Anmelden",
+    "signOut": "Abmelden",
+    "myDetails": "Mein Profil"
+  },
+  "footer": {
+    "tagline": "Notizen & Seiten"
+  },
+  "idleWarning": {
+    "title": "Sie waren inaktiv",
+    "message": "Sie werden in {seconds} Sekunden abgemeldet.",
+    "stayLoggedIn": "Angemeldet bleiben",
+    "logoutNow": "Jetzt abmelden"
+  },
+  "myDetails": {
+    "title": "Mein Profil",
+    "avatarUrl": "Avatar-URL",
+    "useGravatar": "Gravatar verwenden",
+    "generating": "Wird generiert…",
+    "clear": "Löschen",
+    "firstName": "Vorname",
+    "lastName": "Nachname",
+    "email": "E-Mail",
+    "emailNote": "Kontaktieren Sie den Support, um Ihre E-Mail-Adresse zu ändern.",
+    "cancel": "Abbrechen",
+    "saving": "Wird gespeichert…",
+    "save": "Änderungen speichern"
+  },
+  "login": {
+    "appTagline": "Notizen & Seiten",
+    "emailLabel": "E-Mail",
+    "passwordLabel": "Passwort",
+    "signIn": "Anmelden",
+    "forgotPassword": "Passwort vergessen?",
+    "pleaseWait": "Bitte warten…",
+    "resetPasswordTitle": "Passwort zurücksetzen",
+    "sendResetLink": "Reset-Link senden",
+    "backToSignIn": "Zurück zur Anmeldung",
+    "checkInbox": "Prüfen Sie Ihren Posteingang für den Passwort-Reset-Link.",
+    "errors": {
+      "serverError": "Serverfehler. Bitte versuchen Sie es erneut.",
+      "noAccess": "Ihr Konto hat keinen Zugriff auf Tack.",
+      "noAccessQuery": "Ihr Konto hat keinen Zugriff auf Tack. Bitten Sie Ihren Teambesitzer, Tack für Ihr Team zu aktivieren.",
+      "loginFailed": "Anmeldung fehlgeschlagen. Bitte überprüfen Sie Ihre Zugangsdaten.",
+      "resetFailed": "Reset-Link konnte nicht gesendet werden."
+    }
+  },
+  "teamSelector": {
+    "switchTeam": "Team wechseln",
+    "selectTeam": "Team auswählen"
+  },
+  "home": {
+    "welcome": "Willkommen, {name}",
+    "tagline": "Notizen & Seiten, alles an einem Ort.",
+    "activeTeam": "Ansicht als {team}"
+  }
+}
