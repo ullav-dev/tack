@@ -1,0 +1,64 @@
+{
+  "localeSwitcher": {
+    "label": "Language",
+    "en": "English",
+    "de": "Deutsch",
+    "ga": "Gaeilge"
+  },
+  "nav": {
+    "signIn": "Sign in",
+    "signOut": "Sign out",
+    "myDetails": "My Details"
+  },
+  "footer": {
+    "tagline": "Notes & Pages"
+  },
+  "idleWarning": {
+    "title": "You've been idle",
+    "message": "You will be logged out in {seconds} seconds.",
+    "stayLoggedIn": "Stay logged in",
+    "logoutNow": "Log out now"
+  },
+  "myDetails": {
+    "title": "My Details",
+    "avatarUrl": "Avatar URL",
+    "useGravatar": "Use Gravatar",
+    "generating": "Generating…",
+    "clear": "Clear",
+    "firstName": "First name",
+    "lastName": "Last name",
+    "email": "Email",
+    "emailNote": "Contact support to change your email address.",
+    "cancel": "Cancel",
+    "saving": "Saving…",
+    "save": "Save changes"
+  },
+  "login": {
+    "appTagline": "Notes & Pages",
+    "emailLabel": "Email",
+    "passwordLabel": "Password",
+    "signIn": "Sign in",
+    "forgotPassword": "Forgot password?",
+    "pleaseWait": "Please wait…",
+    "resetPasswordTitle": "Reset password",
+    "sendResetLink": "Send reset link",
+    "backToSignIn": "Back to sign in",
+    "checkInbox": "Check your inbox for the password reset link.",
+    "errors": {
+      "serverError": "Server error. Please try again.",
+      "noAccess": "Your account does not have access to Tack.",
+      "noAccessQuery": "Your account does not have access to Tack. Ask your team owner to enable Tack for your team.",
+      "loginFailed": "Login failed. Please check your credentials.",
+      "resetFailed": "Could not send reset link."
+    }
+  },
+  "teamSelector": {
+    "switchTeam": "Switch team",
+    "selectTeam": "Select team"
+  },
+  "home": {
+    "welcome": "Welcome, {name}",
+    "tagline": "Notes & Pages, all in one place.",
+    "activeTeam": "Viewing as {team}"
+  }
+}

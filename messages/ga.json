@@ -1,0 +1,64 @@
+{
+  "localeSwitcher": {
+    "label": "Teanga",
+    "en": "English",
+    "de": "Deutsch",
+    "ga": "Gaeilge"
+  },
+  "nav": {
+    "signIn": "Sínigh isteach",
+    "signOut": "Logáil amach",
+    "myDetails": "Mo Shonraí"
+  },
+  "footer": {
+    "tagline": "Nótaí & Leathanaigh"
+  },
+  "idleWarning": {
+    "title": "Bhí tú díomhaoin",
+    "message": "Déanfar do dhíshealbhú i gceann {seconds} soicind.",
+    "stayLoggedIn": "Fan logáilte isteach",
+    "logoutNow": "Logáil amach anois"
+  },
+  "myDetails": {
+    "title": "Mo Shonraí",
+    "avatarUrl": "URL Abhatár",
+    "useGravatar": "Gravatar a úsáid",
+    "generating": "Á ghiniúint…",
+    "clear": "Glan",
+    "firstName": "Céadainm",
+    "lastName": "Sloinne",
+    "email": "Ríomhphost",
+    "emailNote": "Déan teagmháil le tacaíocht chun do sheoladh ríomhphoist a athrú.",
+    "cancel": "Cealaigh",
+    "saving": "Á shábháil…",
+    "save": "Sábháil athruithe"
+  },
+  "login": {
+    "appTagline": "Nótaí & Leathanaigh",
+    "emailLabel": "Ríomhphost",
+    "passwordLabel": "Pasfhocal",
+    "signIn": "Sínigh isteach",
+    "forgotPassword": "Pasfhocal dearmadta?",
+    "pleaseWait": "Fan le do thoil…",
+    "resetPasswordTitle": "Athshocraigh pasfhocal",
+    "sendResetLink": "Seol nasc athshocraithe",
+    "backToSignIn": "Ar ais go dtí an síniú isteach",
+    "checkInbox": "Seiceáil do bhosca isteach le haghaidh an naisc athshocraithe pasfhocail.",
+    "errors": {
+      "serverError": "Earráid freastalaí. Bain triail as arís.",
+      "noAccess": "Níl rochtain ag do chuntas ar Tack.",
+      "noAccessQuery": "Níl rochtain ag do chuntas ar Tack. Iarr ar úinéir d'fhoirne Tack a chumasú do d'fhoireann.",
+      "loginFailed": "Theip ar an síniú isteach. Seiceáil do dhintiúir.",
+      "resetFailed": "Níorbh fhéidir an nasc athshocraithe a sheoladh."
+    }
+  },
+  "teamSelector": {
+    "switchTeam": "Athraigh foireann",
+    "selectTeam": "Roghnaigh foireann"
+  },
+  "home": {
+    "welcome": "Fáilte, {name}",
+    "tagline": "Nótaí agus Leathanaigh, uile in aon áit amháin.",
+    "activeTeam": "Ag féachaint mar {team}"
+  }
+}
