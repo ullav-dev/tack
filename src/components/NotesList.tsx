@@ -22,7 +22,7 @@ export default function NotesList() {
   const { token } = useAuth();
   const { activeTeam } = useTeam();
   const router = useRouter();
-  const { subscribe, subscribeRefresh } = useNoteEvents();
+  const { subscribe, subscribeDeleted, subscribeRefresh } = useNoteEvents();
   const t = useTranslations("navigator");
   const tNotes = useTranslations("notes");
   const [notes, setNotes] = useState<Note[]>([]);
@@ -69,6 +69,15 @@ export default function NotesList() {
       setNotes((prev) => prev.map((n) => (n.id === noteId ? { ...n, ...patch } : n)));
     });
   }, [subscribe]);
+
+  // NoteThread also broadcasts when the note itself was deleted, so it
+  // disappears from this list immediately rather than waiting for the next
+  // refresh tick.
+  useEffect(() => {
+    return subscribeDeleted((noteId) => {
+      setNotes((prev) => prev.filter((n) => n.id !== noteId));
+    });
+  }, [subscribeDeleted]);
 
   useEffect(() => {
     notesLengthRef.current = notes.length;

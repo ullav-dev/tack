@@ -97,6 +97,12 @@ export interface Note {
   created_at: string;
   updated_at: string;
   reply_count: number;
+  /** For a reply, the parent note's latest saved version number at the
+   * moment this reply was created -- `null` for top-level notes and for
+   * replies made before this field existed. Used to show a reply only
+   * while browsing that version (or the current state, if it's still the
+   * latest one). */
+  in_reply_to_version: number | null;
 }
 
 export interface NotesPage {
@@ -155,6 +161,11 @@ export const listRevisions = (token: string, id: string): Promise<NoteRevision[]
  * action (button click), not an automatic side effect of every save. */
 export const createRevision = (token: string, id: string): Promise<NoteRevision> =>
   apiRequest(`/notes/${id}/revisions`, token, { method: "POST" });
+
+/** Deletes one saved version. The server refuses to delete the last
+ * remaining one. */
+export const deleteRevision = (token: string, noteId: string, revisionId: string): Promise<void> =>
+  apiRequest(`/notes/${noteId}/revisions/${revisionId}`, token, { method: "DELETE" });
 
 // ── Search ────────────────────────────────────────────────────────────────────
 

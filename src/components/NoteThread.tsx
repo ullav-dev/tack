@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
+import { useRouter } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { isAdmin } from "@/lib/auth-api";
 import { useNoteEvents } from "@/contexts/NoteEventsContext";
@@ -21,6 +22,7 @@ import {
 import NoteMarkdown from "@/components/NoteMarkdown";
 import MarkdownComposer from "@/components/MarkdownComposer";
 import VersionHistory from "@/components/VersionHistory";
+import DeleteNoteModal from "@/components/DeleteNoteModal";
 
 interface Props {
   noteId: string;
@@ -127,10 +129,24 @@ const deleteIcon = (
  * same way) -- each `ReplyItem` gets its own "Save as version"/"History"
  * controls, but deliberately without an eager version-number badge (that
  * would mean one extra request per reply on every load; the number is only
- * fetched when that reply's own history drawer is opened). */
+ * fetched when that reply's own history drawer is opened).
+ *
+ * A reply is tagged (server-side, at creation) with whichever version of
+ * the parent note was current when it was written (`in_reply_to_version`).
+ * The thread's normal view only shows replies tagged with the *current*
+ * latest version -- a reply made against v1 stops being shown once the
+ * owner explicitly saves v2, since it was a comment on the old body, not
+ * the new one. Older-tagged replies aren't just dropped, though: a small
+ * "N replies from earlier versions" note links out to the history drawer,
+ * which shows each version's own replies alongside its snapshot.
+ *
+ * Deleting the note itself (not a version) opens `DeleteNoteModal` --
+ * cascades to every version and reply server-side, so it needs an explicit,
+ * properly worded confirmation rather than an inline icon-click. */
 export default function NoteThread({ noteId }: Props) {
   const { token, user } = useAuth();
-  const { notifyNoteUpdated, subscribeRefresh } = useNoteEvents();
+  const { notifyNoteUpdated, notifyNoteDeleted, subscribeRefresh } = useNoteEvents();
+  const router = useRouter();
   const t = useTranslations("notes");
 
   const [note, setNote] = useState<Note | null>(null);
@@ -154,6 +170,7 @@ export default function NoteThread({ noteId }: Props) {
   const [replying, setReplying] = useState(false);
 
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
   const resolveAuthor = useTeamRoster(note?.team_id ?? null);
   const canEditReply = (reply: Note) => Boolean(user) && (user!.id === reply.created_by || isAdmin(token));
@@ -285,11 +302,29 @@ export default function NoteThread({ noteId }: Props) {
     await createRevision(token, replyId);
   }
 
+  async function deleteThisNote() {
+    if (!token || !note) return;
+    await deleteNote(token, note.id);
+    notifyNoteDeleted(note.id);
+    router.push("/notes");
+  }
+
   if (error) return <p className="p-6 text-red-600">{error}</p>;
   if (!note) return <p className="p-6 text-slate-400">{t("loading")}</p>;
 
   const latestRevision = revisions?.[0] ?? null;
   const editedSinceLastVersion = latestRevision !== null && latestRevision.body_markdown !== note.body_markdown;
+
+  // Only show replies made against the version currently being viewed
+  // (here, always "current" -- the live body). A reply with no recorded
+  // version (created before `in_reply_to_version` existed) is treated as
+  // always-current, matching its old always-visible behavior.
+  const currentReplies = replies.filter(
+    (r) => r.in_reply_to_version === null || r.in_reply_to_version === latestRevision?.version
+  );
+  const olderReplies = replies.filter(
+    (r) => r.in_reply_to_version !== null && r.in_reply_to_version !== latestRevision?.version
+  );
 
   return (
     <div className="p-6 max-w-3xl space-y-6">
@@ -351,6 +386,11 @@ export default function NoteThread({ noteId }: Props) {
             {editIcon}
           </IconButton>
         )}
+        {canEdit && (
+          <IconButton title={t("deleteNote")} onClick={() => setDeleteModalOpen(true)} danger>
+            {deleteIcon}
+          </IconButton>
+        )}
       </div>
 
       {versionMessage && <p className="text-xs text-green-700">{versionMessage}</p>}
@@ -383,9 +423,9 @@ export default function NoteThread({ noteId }: Props) {
         <NoteMarkdown body={note.body_markdown} />
       )}
 
-      {replies.length > 0 && (
+      {currentReplies.length > 0 && (
         <div className="border-t border-slate-200 pt-4 space-y-4">
-          {replies.map((reply) => (
+          {currentReplies.map((reply) => (
             <ReplyItem
               key={reply.id}
               reply={reply}
@@ -397,6 +437,16 @@ export default function NoteThread({ noteId }: Props) {
             />
           ))}
         </div>
+      )}
+
+      {olderReplies.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setHistoryOpen(true)}
+          className="block text-xs text-slate-400 hover:text-rose-700"
+        >
+          {t("olderReplies", { count: olderReplies.length })}
+        </button>
       )}
 
       <div className="border-t border-slate-200 pt-4 space-y-2">
@@ -413,7 +463,19 @@ export default function NoteThread({ noteId }: Props) {
         </div>
       </div>
 
-      {historyOpen && <VersionHistory noteId={note.id} onClose={() => setHistoryOpen(false)} />}
+      {historyOpen && (
+        <VersionHistory
+          noteId={note.id}
+          canEdit={canEdit}
+          replies={replies}
+          onRevisionsChanged={setRevisions}
+          onClose={() => setHistoryOpen(false)}
+        />
+      )}
+
+      {deleteModalOpen && (
+        <DeleteNoteModal onConfirm={deleteThisNote} onCancel={() => setDeleteModalOpen(false)} />
+      )}
     </div>
   );
 }
@@ -567,7 +629,7 @@ function ReplyItem({ reply, authorName, canEdit, onSave, onDelete, onCreateVersi
         <NoteMarkdown body={reply.body_markdown} />
       )}
 
-      {historyOpen && <VersionHistory noteId={reply.id} onClose={() => setHistoryOpen(false)} />}
+      {historyOpen && <VersionHistory noteId={reply.id} canEdit={canEdit} onClose={() => setHistoryOpen(false)} />}
     </div>
   );
 }

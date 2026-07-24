@@ -64,6 +64,11 @@
     "deleteCancel": "Coinnigh é",
     "editedSinceSave": "curtha in eagar ón leagan seo",
     "history": "Stair",
+    "deleteVersionConfirm": "An leagan seo a scriosadh? Ní bheidh a fhreagraí inrochtana ón stair a thuilleadh.",
+    "olderReplies": "{count} {count, plural, one {fhreagra} other {freagra}} ó leaganacha níos sine — féach ar stair na leaganacha",
+    "deleteNote": "Scrios an nóta",
+    "deleteNoteConfirmTitle": "An nóta seo a scriosadh?",
+    "deleteNoteConfirmBody": "Scriosfaidh sé seo an nóta, gach leagan sábháilte, agus gach freagra. Ní féidir é seo a chur ar ceal.",
     "visibility": {
       "private": "Príobháideach",
       "team": "Foireann",

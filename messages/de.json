@@ -64,6 +64,11 @@
     "deleteCancel": "Behalten",
     "editedSinceSave": "seit dieser Version bearbeitet",
     "history": "Verlauf",
+    "deleteVersionConfirm": "Diese Version löschen? Ihre Antworten sind dann im Verlauf nicht mehr erreichbar.",
+    "olderReplies": "{count} {count, plural, one {Antwort} other {Antworten}} aus früheren Versionen — siehe Versionsverlauf",
+    "deleteNote": "Notiz löschen",
+    "deleteNoteConfirmTitle": "Diese Notiz löschen?",
+    "deleteNoteConfirmBody": "Dadurch werden die Notiz, alle gespeicherten Versionen und alle Antworten gelöscht. Dies kann nicht rückgängig gemacht werden.",
     "visibility": {
       "private": "Privat",
       "team": "Team",

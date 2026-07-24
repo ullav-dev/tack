@@ -64,6 +64,11 @@
     "deleteCancel": "Keep it",
     "editedSinceSave": "edited since this version",
     "history": "History",
+    "deleteVersionConfirm": "Delete this version? Its replies will no longer be reachable from history.",
+    "olderReplies": "{count} {count, plural, one {reply} other {replies}} from earlier versions — see version history",
+    "deleteNote": "Delete note",
+    "deleteNoteConfirmTitle": "Delete this note?",
+    "deleteNoteConfirmBody": "This deletes the note, all its saved versions, and all its replies. This can't be undone.",
     "visibility": {
       "private": "Private",
       "team": "Team",
