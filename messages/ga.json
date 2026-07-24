@@ -59,6 +59,11 @@
     "versionCreated": "Leagan sábháilte.",
     "editedBy": "ag {name}",
     "refresh": "Athnuachan",
+    "delete": "Scrios",
+    "deleteConfirm": "An bhfreagra seo a scriosadh?",
+    "deleteCancel": "Coinnigh é",
+    "editedSinceSave": "curtha in eagar ón leagan seo",
+    "history": "Stair",
     "visibility": {
       "private": "Príobháideach",
       "team": "Foireann",

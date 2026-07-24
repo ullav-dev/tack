@@ -4,10 +4,15 @@ import { createContext, useCallback, useContext, useRef } from "react";
 import type { Note } from "@/lib/tack-server-api";
 
 type Listener = (noteId: string, patch: Partial<Note>) => void;
+type RefreshListener = () => Promise<void> | void;
 
 interface NoteEventsContextValue {
   notifyNoteUpdated: (noteId: string, patch: Partial<Note>) => void;
   subscribe: (listener: Listener) => () => void;
+  /** Register to be re-fetched when the shared refresh timer/button fires. */
+  subscribeRefresh: (listener: RefreshListener) => () => void;
+  /** Fires every registered refresh listener and resolves once they've all settled. */
+  triggerRefresh: () => Promise<void>;
 }
 
 const NoteEventsContext = createContext<NoteEventsContextValue | null>(null);
@@ -17,9 +22,16 @@ const NoteEventsContext = createContext<NoteEventsContextValue | null>(null);
  * edit made in NoteThread (right panel); they're siblings with no other
  * shared state. Kept as its own separate context rather than generalizing
  * `PageEventsContext` to cover both content types, matching this codebase's
- * preference for a second small copy over a premature shared abstraction. */
+ * preference for a second small copy over a premature shared abstraction.
+ *
+ * Also carries a second, independent pub/sub for the shared auto/manual
+ * refresh timer: one `RefreshControl` lives in the Navigator (always
+ * mounted, unlike NoteThread which unmounts per note) and drives both the
+ * Notes list and whichever note thread is currently open from a single
+ * timer/button, rather than each panel running its own. */
 export function NoteEventsProvider({ children }: { children: React.ReactNode }) {
   const listenersRef = useRef<Set<Listener>>(new Set());
+  const refreshListenersRef = useRef<Set<RefreshListener>>(new Set());
 
   const notifyNoteUpdated = useCallback((noteId: string, patch: Partial<Note>) => {
     listenersRef.current.forEach((listener) => listener(noteId, patch));
@@ -32,8 +44,21 @@ export function NoteEventsProvider({ children }: { children: React.ReactNode }) 
     };
   }, []);
 
+  const subscribeRefresh = useCallback((listener: RefreshListener) => {
+    refreshListenersRef.current.add(listener);
+    return () => {
+      refreshListenersRef.current.delete(listener);
+    };
+  }, []);
+
+  const triggerRefresh = useCallback(async () => {
+    await Promise.all(Array.from(refreshListenersRef.current).map((listener) => listener()));
+  }, []);
+
   return (
-    <NoteEventsContext.Provider value={{ notifyNoteUpdated, subscribe }}>{children}</NoteEventsContext.Provider>
+    <NoteEventsContext.Provider value={{ notifyNoteUpdated, subscribe, subscribeRefresh, triggerRefresh }}>
+      {children}
+    </NoteEventsContext.Provider>
   );
 }
 

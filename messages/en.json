@@ -59,6 +59,11 @@
     "versionCreated": "Version saved.",
     "editedBy": "by {name}",
     "refresh": "Refresh",
+    "delete": "Delete",
+    "deleteConfirm": "Delete this reply?",
+    "deleteCancel": "Keep it",
+    "editedSinceSave": "edited since this version",
+    "history": "History",
     "visibility": {
       "private": "Private",
       "team": "Team",

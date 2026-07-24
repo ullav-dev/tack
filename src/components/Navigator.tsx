@@ -4,9 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/contexts/AuthContext";
+import { useNoteEvents } from "@/contexts/NoteEventsContext";
 import { listSpaces, search, type SearchHit, type Space } from "@/lib/tack-server-api";
 import PageTree from "@/components/PageTree";
 import NotesList from "@/components/NotesList";
+import RefreshControl from "@/components/RefreshControl";
 
 const SEARCH_DEBOUNCE_MS = 300;
 
@@ -18,6 +20,7 @@ const SEARCH_DEBOUNCE_MS = 300;
  * (see PageTree.tsx). */
 export default function Navigator() {
   const { token } = useAuth();
+  const { triggerRefresh } = useNoteEvents();
   const t = useTranslations("navigator");
 
   const [spaces, setSpaces] = useState<Space[] | null>(null);
@@ -114,8 +117,9 @@ export default function Navigator() {
           </div>
         ) : (
           <>
-            <div className="px-4 pt-3 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
-              {t("notes")}
+            <div className="px-4 pt-3 pb-1 flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t("notes")}</span>
+              <RefreshControl onRefresh={triggerRefresh} storageKey="tack_notes_refresh_interval" />
             </div>
             <NotesList />
 

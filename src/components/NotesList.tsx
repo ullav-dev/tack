@@ -15,12 +15,14 @@ const PAGE_SIZE = 20;
  * active team — a team's note volume isn't bounded, so this loads a page
  * at a time rather than everything up front. Resets (and discards any
  * stale in-flight fetch, via `generationRef`) whenever the active team
- * changes. */
+ * changes. Also refetches on the shared refresh timer/button (see
+ * NoteEventsContext.tsx), so a note created by someone else appears
+ * without a manual reload. */
 export default function NotesList() {
   const { token } = useAuth();
   const { activeTeam } = useTeam();
   const router = useRouter();
-  const { subscribe } = useNoteEvents();
+  const { subscribe, subscribeRefresh } = useNoteEvents();
   const t = useTranslations("navigator");
   const tNotes = useTranslations("notes");
   const [notes, setNotes] = useState<Note[]>([]);
@@ -28,6 +30,7 @@ export default function NotesList() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const generationRef = useRef(0);
+  const notesLengthRef = useRef(0);
 
   const [composing, setComposing] = useState(false);
   const [newVisibility, setNewVisibility] = useState<Visibility>("private");
@@ -66,6 +69,31 @@ export default function NotesList() {
       setNotes((prev) => prev.map((n) => (n.id === noteId ? { ...n, ...patch } : n)));
     });
   }, [subscribe]);
+
+  useEffect(() => {
+    notesLengthRef.current = notes.length;
+  }, [notes]);
+
+  // Driven by the single shared RefreshControl in the Navigator (see
+  // NoteEventsContext.tsx) rather than owning its own timer -- re-fetches
+  // however many notes are currently loaded (at least PAGE_SIZE), so a new
+  // note created by someone else becomes visible without a full reload.
+  useEffect(() => {
+    return subscribeRefresh(async () => {
+      if (!token || !activeTeam) return;
+      generationRef.current += 1;
+      const generation = generationRef.current;
+      const limit = Math.max(notesLengthRef.current, PAGE_SIZE);
+      try {
+        const page = await listNotes(token, activeTeam.id, { limit, offset: 0 });
+        if (generation !== generationRef.current) return;
+        setNotes(page.notes);
+        setHasMore(page.has_more);
+      } catch (e) {
+        if (generation === generationRef.current) setError((e as Error).message);
+      }
+    });
+  }, [subscribeRefresh, token, activeTeam]);
 
   function loadMore() {
     if (!token || !activeTeam || loading) return;

@@ -9,16 +9,18 @@ import { useTeamRoster } from "@/hooks/useTeamRoster";
 import {
   createReply,
   createRevision,
+  deleteNote,
   getNote,
   listReplies,
+  listRevisions,
   updateNote,
   type Note,
+  type NoteRevision,
   type Visibility,
 } from "@/lib/tack-server-api";
 import NoteMarkdown from "@/components/NoteMarkdown";
 import MarkdownComposer from "@/components/MarkdownComposer";
 import VersionHistory from "@/components/VersionHistory";
-import RefreshControl from "@/components/RefreshControl";
 
 interface Props {
   noteId: string;
@@ -29,8 +31,11 @@ interface Props {
  * explicit request/response cycle (Save button), matching the backend's
  * single-writer markdown model. `canEdit` mirrors `notes_acl.rs`'s exact
  * rule (creator or admin) client-side for UI purposes only -- the backend
- * still enforces this authoritatively on every PATCH/reply. Visibility is
- * changed immediately on selection (no separate Save step), same as the
+ * still enforces this authoritatively on every PATCH/reply/delete. Each
+ * reply gets its own edit/delete controls, gated by the same rule applied
+ * to that reply's own `created_by` -- a reply is just a `notes` row, so the
+ * same endpoints (PATCH/DELETE /notes/:id) work on it directly. Visibility
+ * is changed immediately on selection (no separate Save step), same as the
  * title's save-on-blur pattern -- both are metadata fields, not part of the
  * body-edit/version flow.
  *
@@ -38,15 +43,31 @@ interface Props {
  * the body (Save) no longer implicitly creates a revision server-side; a
  * version is a deliberate snapshot the note owner chooses to take, not a
  * side effect of every autosave-style edit. Notes have no push/live update
- * mechanism (unlike Pages' Hocuspocus sync), so `RefreshControl` is how a
- * user sees replies/edits made by someone else. */
+ * mechanism (unlike Pages' Hocuspocus sync), so this subscribes to the
+ * single shared refresh timer/button that lives in the Navigator (see
+ * NoteEventsContext.tsx) rather than owning its own -- one timer covers
+ * both the Notes list and whichever thread is open.
+ *
+ * The top-level note's current version number is shown next to the
+ * "Version history" button, fetched eagerly (one extra request) since
+ * there's only one top-level note per thread. If the live body has been
+ * edited since that version was saved, an "edited since this version" note
+ * appears alongside it -- otherwise there'd be no way to tell whether
+ * what's on screen matches the latest saved snapshot or has since drifted.
+ * Versioning applies to replies identically (a reply is just a `notes` row
+ * with `parent_id` set, so `POST/GET /notes/:id/revisions` work on it the
+ * same way) -- each `ReplyItem` gets its own "Save as version"/"History"
+ * controls, but deliberately without an eager version-number badge (that
+ * would mean one extra request per reply on every load; the number is only
+ * fetched when that reply's own history drawer is opened). */
 export default function NoteThread({ noteId }: Props) {
   const { token, user } = useAuth();
-  const { notifyNoteUpdated } = useNoteEvents();
+  const { notifyNoteUpdated, subscribeRefresh } = useNoteEvents();
   const t = useTranslations("notes");
 
   const [note, setNote] = useState<Note | null>(null);
   const [replies, setReplies] = useState<Note[]>([]);
+  const [revisions, setRevisions] = useState<NoteRevision[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [titleDraft, setTitleDraft] = useState("");
@@ -67,17 +88,19 @@ export default function NoteThread({ noteId }: Props) {
   const [historyOpen, setHistoryOpen] = useState(false);
 
   const resolveAuthor = useTeamRoster(note?.team_id ?? null);
+  const canEditReply = (reply: Note) => Boolean(user) && (user!.id === reply.created_by || isAdmin(token));
 
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
-    Promise.all([getNote(token, noteId), listReplies(token, noteId)])
-      .then(([n, r]) => {
+    Promise.all([getNote(token, noteId), listReplies(token, noteId), listRevisions(token, noteId)])
+      .then(([n, r, rv]) => {
         if (cancelled) return;
         setNote(n);
         setTitleDraft(n.title);
         setBodyDraft(n.body_markdown);
         setReplies(r);
+        setRevisions(rv);
       })
       .catch((e) => {
         if (!cancelled) setError(e.message);
@@ -87,18 +110,21 @@ export default function NoteThread({ noteId }: Props) {
     };
   }, [token, noteId]);
 
-  async function refresh() {
-    if (!token) return;
-    try {
-      const [n, r] = await Promise.all([getNote(token, noteId), listReplies(token, noteId)]);
-      setNote(n);
-      if (!editing) setTitleDraft(n.title);
-      if (!editing) setBodyDraft(n.body_markdown);
-      setReplies(r);
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
+  useEffect(() => {
+    return subscribeRefresh(async () => {
+      if (!token) return;
+      try {
+        const [n, r, rv] = await Promise.all([getNote(token, noteId), listReplies(token, noteId), listRevisions(token, noteId)]);
+        setNote(n);
+        if (!editing) setTitleDraft(n.title);
+        if (!editing) setBodyDraft(n.body_markdown);
+        setReplies(r);
+        setRevisions(rv);
+      } catch (e) {
+        setError((e as Error).message);
+      }
+    });
+  }, [subscribeRefresh, token, noteId, editing]);
 
   const canEdit = Boolean(user) && (user!.id === note?.created_by || isAdmin(token));
 
@@ -148,7 +174,8 @@ export default function NoteThread({ noteId }: Props) {
     setCreatingVersion(true);
     setVersionMessage(null);
     try {
-      await createRevision(token, note.id);
+      const revision = await createRevision(token, note.id);
+      setRevisions((prev) => [revision, ...(prev ?? [])]);
       setVersionMessage(t("versionCreated"));
     } catch (e) {
       setError((e as Error).message);
@@ -172,8 +199,29 @@ export default function NoteThread({ noteId }: Props) {
     }
   }
 
+  async function saveReplyEdit(replyId: string, body: string) {
+    if (!token) return;
+    const updated = await updateNote(token, replyId, { body_markdown: body.trim() });
+    setReplies((prev) => prev.map((r) => (r.id === replyId ? updated : r)));
+  }
+
+  async function deleteReply(replyId: string) {
+    if (!token) return;
+    await deleteNote(token, replyId);
+    setReplies((prev) => prev.filter((r) => r.id !== replyId));
+    setNote((prev) => (prev ? { ...prev, reply_count: Math.max(0, prev.reply_count - 1) } : prev));
+  }
+
+  async function saveReplyVersion(replyId: string) {
+    if (!token) return;
+    await createRevision(token, replyId);
+  }
+
   if (error) return <p className="p-6 text-red-600">{error}</p>;
   if (!note) return <p className="p-6 text-slate-400">{t("loading")}</p>;
+
+  const latestRevision = revisions?.[0] ?? null;
+  const editedSinceLastVersion = latestRevision !== null && latestRevision.body_markdown !== note.body_markdown;
 
   return (
     <div className="p-6 max-w-3xl space-y-6">
@@ -193,7 +241,6 @@ export default function NoteThread({ noteId }: Props) {
         ) : (
           <h1 className="text-xl font-semibold text-slate-800 flex-1 min-w-0 truncate">{note.title}</h1>
         )}
-        <RefreshControl onRefresh={refresh} storageKey="tack_note_refresh_interval" />
       </div>
 
       <div className="flex items-center gap-2">
@@ -217,6 +264,12 @@ export default function NoteThread({ noteId }: Props) {
           {t("editedBy", { name: resolveAuthor(note.created_by) })} · {new Date(note.created_at).toLocaleString()}
         </span>
         <div className="flex-1" />
+        {latestRevision && (
+          <span className="text-xs text-slate-400">
+            {t("version", { n: latestRevision.version })}
+            {editedSinceLastVersion && ` · ${t("editedSinceSave")}`}
+          </span>
+        )}
         <button type="button" onClick={() => setHistoryOpen(true)} className="text-xs text-slate-500 hover:text-rose-700">
           {t("versionHistory")}
         </button>
@@ -270,12 +323,15 @@ export default function NoteThread({ noteId }: Props) {
       {replies.length > 0 && (
         <div className="border-t border-slate-200 pt-4 space-y-4">
           {replies.map((reply) => (
-            <div key={reply.id} className="pl-4 border-l-2 border-slate-200">
-              <span className="text-xs text-slate-400">
-                {resolveAuthor(reply.created_by)} · {new Date(reply.created_at).toLocaleString()}
-              </span>
-              <NoteMarkdown body={reply.body_markdown} />
-            </div>
+            <ReplyItem
+              key={reply.id}
+              reply={reply}
+              authorName={resolveAuthor(reply.created_by)}
+              canEdit={canEditReply(reply)}
+              onSave={(body) => saveReplyEdit(reply.id, body)}
+              onDelete={() => deleteReply(reply.id)}
+              onCreateVersion={() => saveReplyVersion(reply.id)}
+            />
           ))}
         </div>
       )}
@@ -295,6 +351,165 @@ export default function NoteThread({ noteId }: Props) {
       </div>
 
       {historyOpen && <VersionHistory noteId={note.id} onClose={() => setHistoryOpen(false)} />}
+    </div>
+  );
+}
+
+interface ReplyItemProps {
+  reply: Note;
+  authorName: string;
+  canEdit: boolean;
+  onSave: (body: string) => Promise<void>;
+  onDelete: () => Promise<void>;
+  onCreateVersion: () => Promise<void>;
+}
+
+/** One reply's own view/edit/delete/version UI. Kept as a subcomponent
+ * (rather than a map of edit-state keyed by id in the parent) since each
+ * reply's editing/confirm-delete/history state is entirely local to
+ * itself. Delete uses a two-step "Delete" -> "Really?"/"Keep it" confirm in
+ * place, not `window.confirm` (no first-party app in this org uses the
+ * native confirm dialog).
+ *
+ * Versioning applies to a reply exactly like it does to the top-level note
+ * (same backend endpoints, same explicit-save-only rule) -- "Save as
+ * version" and "History" are always shown here (not just while editing),
+ * since a reply's own body-edit flow has no separate Save-triggers-version
+ * step to hang them off. */
+function ReplyItem({ reply, authorName, canEdit, onSave, onDelete, onCreateVersion }: ReplyItemProps) {
+  const t = useTranslations("notes");
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(reply.body_markdown);
+  const [saving, setSaving] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [creatingVersion, setCreatingVersion] = useState(false);
+  const [versionMessage, setVersionMessage] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSave() {
+    if (!draft.trim()) return;
+    setSaving(true);
+    try {
+      await onSave(draft);
+      setEditing(false);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    setDeleting(true);
+    try {
+      await onDelete();
+    } catch (e) {
+      setError((e as Error).message);
+      setDeleting(false);
+      setConfirmingDelete(false);
+    }
+  }
+
+  async function handleCreateVersion() {
+    setCreatingVersion(true);
+    setVersionMessage(null);
+    try {
+      await onCreateVersion();
+      setVersionMessage(t("versionCreated"));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setCreatingVersion(false);
+    }
+  }
+
+  return (
+    <div className="pl-4 border-l-2 border-slate-200">
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-slate-400">
+          {authorName} · {new Date(reply.created_at).toLocaleString()}
+        </span>
+        <div className="flex-1" />
+        {!confirmingDelete && (
+          <button type="button" onClick={() => setHistoryOpen(true)} className="text-xs text-slate-400 hover:text-rose-700">
+            {t("history")}
+          </button>
+        )}
+        {canEdit && !editing && !confirmingDelete && (
+          <>
+            <button
+              type="button"
+              onClick={handleCreateVersion}
+              disabled={creatingVersion}
+              className="text-xs text-slate-400 hover:text-rose-700 disabled:opacity-50"
+            >
+              {creatingVersion ? t("saving") : t("createVersion")}
+            </button>
+            <button type="button" onClick={() => setEditing(true)} className="text-xs text-slate-400 hover:text-rose-700">
+              {t("edit")}
+            </button>
+            <button type="button" onClick={() => setConfirmingDelete(true)} className="text-xs text-slate-400 hover:text-rose-700">
+              {t("delete")}
+            </button>
+          </>
+        )}
+        {confirmingDelete && (
+          <>
+            <span className="text-xs text-slate-500">{t("deleteConfirm")}</span>
+            <button
+              type="button"
+              onClick={() => setConfirmingDelete(false)}
+              disabled={deleting}
+              className="text-xs text-slate-400 hover:text-slate-600"
+            >
+              {t("deleteCancel")}
+            </button>
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={deleting}
+              className="text-xs text-red-600 hover:text-red-800 font-medium disabled:opacity-50"
+            >
+              {deleting ? t("saving") : t("delete")}
+            </button>
+          </>
+        )}
+      </div>
+
+      {error && <p className="text-xs text-red-600">{error}</p>}
+      {versionMessage && <p className="text-xs text-green-700">{versionMessage}</p>}
+
+      {editing ? (
+        <div className="space-y-2 mt-1">
+          <MarkdownComposer value={draft} onChange={setDraft} disabled={saving} rows={3} />
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setEditing(false);
+                setDraft(reply.body_markdown);
+              }}
+              className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1"
+            >
+              {t("cancel")}
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving || !draft.trim()}
+              className="text-xs bg-rose-700 hover:bg-rose-800 disabled:opacity-50 text-white px-3 py-1 rounded"
+            >
+              {saving ? t("saving") : t("save")}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <NoteMarkdown body={reply.body_markdown} />
+      )}
+
+      {historyOpen && <VersionHistory noteId={reply.id} onClose={() => setHistoryOpen(false)} />}
     </div>
   );
 }

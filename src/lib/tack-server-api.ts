@@ -137,6 +137,12 @@ export const updateNote = (
   payload: { title?: string; body_markdown?: string; visibility?: Visibility }
 ): Promise<Note> => apiRequest(`/notes/${id}`, token, { method: "PATCH", body: JSON.stringify(payload) });
 
+/** Soft-deletes a note or reply -- same endpoint, same creator-or-admin ACL
+ * rule either way, since a reply is just a `notes` row with `parent_id`
+ * set. */
+export const deleteNote = (token: string, id: string): Promise<void> =>
+  apiRequest(`/notes/${id}`, token, { method: "DELETE" });
+
 export const listReplies = (token: string, id: string): Promise<Note[]> => apiRequest(`/notes/${id}/replies`, token);
 
 export const createReply = (token: string, id: string, body_markdown: string): Promise<Note> =>

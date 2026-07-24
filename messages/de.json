@@ -59,6 +59,11 @@
     "versionCreated": "Version gespeichert.",
     "editedBy": "von {name}",
     "refresh": "Aktualisieren",
+    "delete": "Löschen",
+    "deleteConfirm": "Diese Antwort löschen?",
+    "deleteCancel": "Behalten",
+    "editedSinceSave": "seit dieser Version bearbeitet",
+    "history": "Verlauf",
     "visibility": {
       "private": "Privat",
       "team": "Team",
