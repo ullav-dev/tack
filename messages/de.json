@@ -28,7 +28,15 @@
     "searchPlaceholder": "Notizen und Seiten durchsuchen…",
     "searching": "Wird gesucht…",
     "noResults": "Keine Ergebnisse.",
-    "notIndexedYet": "Noch nicht verlinkbar — die Seitenindizierung für die Suche steht noch aus"
+    "notIndexedYet": "Noch nicht verlinkbar — die Seitenindizierung für die Suche steht noch aus",
+    "newPage": "Neue Seite",
+    "newPageTitle": "Seitentitel…"
+  },
+  "editor": {
+    "loading": "Wird geladen…",
+    "viewOnly": "Nur Ansicht",
+    "allChangesSaved": "Alle Änderungen gespeichert",
+    "syncing": "Wird synchronisiert…"
   },
   "footer": {
     "tagline": "Notizen & Seiten"

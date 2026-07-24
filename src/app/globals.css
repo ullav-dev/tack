@@ -1,7 +1,102 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 html,
 body,
 #__next {
   height: 100%;
+}
+
+/* TipTap's CollaborationCaret extension renders unstyled markup by default
+   (a thin caret + an always-visible name label) -- this is the org's own
+   styling for it, matching the rose-700 brand accent used elsewhere, not
+   TipTap's defaults. */
+.collaboration-carets__caret {
+  position: relative;
+  margin-left: -1px;
+  margin-right: -1px;
+  border-left: 1.5px solid;
+  border-right: 1.5px solid;
+  word-break: normal;
+  pointer-events: none;
+}
+
+.collaboration-carets__label {
+  position: absolute;
+  top: -1.4em;
+  left: -1.5px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  border-radius: 3px 3px 3px 0;
+  padding: 2px 5px;
+  color: #fff;
+  user-select: none;
+}
+
+/* The Page editor's contenteditable surface: a real bordered "document"
+   block rather than borderless plain text, so it reads as an editable
+   area even before the user interacts with it. */
+.ProseMirror {
+  min-height: 12rem;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 0.5rem;
+  padding: 1rem 1.25rem;
+  outline: none;
+}
+.ProseMirror:focus {
+  border-color: var(--color-rose-300);
+  box-shadow: 0 0 0 1px var(--color-rose-300);
+}
+
+/* @tiptap/extension-table ships no styling of its own. `table-layout: fixed`
+   without a real width would stretch even a freshly-inserted small table to
+   the full editor width -- sized to content instead, with a sane minimum
+   per cell so an empty table isn't collapsed to nothing.
+
+   Selectors are qualified with `table` (not just `.ProseMirror th`) to
+   outrank @tailwindcss/typography's own `.prose table/th/td` rules, since
+   `EditorContent` wraps this in a `prose` class for surrounding text
+   typography -- without the extra specificity, the plugin's own table
+   opinions (different padding/borders) can win instead of these. */
+.ProseMirror table {
+  border-collapse: collapse;
+  width: auto;
+  margin: 0.75em 0;
+  border: 1px solid var(--color-slate-300);
+}
+.ProseMirror table th,
+.ProseMirror table td {
+  border: 1px solid var(--color-slate-300);
+  padding: 0.25em 0.6em;
+  min-width: 3em;
+  vertical-align: top;
+  position: relative;
+}
+/* TipTap wraps every cell's content in a <p> -- @tailwindcss/typography
+   gives every <p> vertical margin, which stacks with cell padding and
+   makes empty/short rows look much taller than intended. Cells don't need
+   paragraph spacing the way flowing body text does. */
+.ProseMirror table td > p,
+.ProseMirror table th > p {
+  margin: 0;
+}
+.ProseMirror table th {
+  background-color: var(--color-slate-100);
+  font-weight: 600;
+  text-align: left;
+  border-bottom: 2px solid var(--color-slate-300);
+}
+.ProseMirror .selectedCell {
+  background-color: rgb(190 18 60 / 0.08);
+}
+.ProseMirror .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background-color: var(--color-rose-400);
+  pointer-events: none;
 }
