@@ -18,11 +18,17 @@
     "loading": "Á lódáil…",
     "noSpaces": "Níl aon spásanna ann fós.",
     "noPages": "Níl aon leathanaigh ann fós.",
+    "selectPage": "Roghnaigh leathanach ar chlé, nó cruthaigh ceann.",
     "noNotes": "Níl aon nótaí ann fós.",
     "selectSpace": "Roghnaigh spás ar chlé, nó cruthaigh ceann.",
     "selectTeamFirst": "Roghnaigh foireann chun a nótaí a fheiceáil.",
     "viewOnly": "Amharc amháin",
-    "untitledNote": "Nóta gan teideal"
+    "untitledNote": "Nóta gan teideal",
+    "loadMore": "Tuilleadh a lódáil",
+    "searchPlaceholder": "Cuardaigh nótaí agus leathanaigh…",
+    "searching": "Ag cuardach…",
+    "noResults": "Níl aon toradh ann.",
+    "notIndexedYet": "Níl sé inlasctha fós — tá innéacsú cuardaigh na leathanach fós ar feitheamh"
   },
   "footer": {
     "tagline": "Nótaí & Leathanaigh"

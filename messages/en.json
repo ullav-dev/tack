@@ -18,11 +18,17 @@
     "loading": "Loading…",
     "noSpaces": "No spaces yet.",
     "noPages": "No pages yet.",
+    "selectPage": "Select a page from the left, or create one.",
     "noNotes": "No notes yet.",
     "selectSpace": "Select a space from the left, or create one.",
     "selectTeamFirst": "Select a team to see its notes.",
     "viewOnly": "View only",
-    "untitledNote": "Untitled note"
+    "untitledNote": "Untitled note",
+    "loadMore": "Load more",
+    "searchPlaceholder": "Search notes and pages…",
+    "searching": "Searching…",
+    "noResults": "No results.",
+    "notIndexedYet": "Not yet linkable — page search indexing is still pending"
   },
   "footer": {
     "tagline": "Notes & Pages"

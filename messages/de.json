@@ -18,11 +18,17 @@
     "loading": "Wird geladen…",
     "noSpaces": "Noch keine Bereiche.",
     "noPages": "Noch keine Seiten.",
+    "selectPage": "Wählen Sie links eine Seite aus oder erstellen Sie eine.",
     "noNotes": "Noch keine Notizen.",
     "selectSpace": "Wählen Sie links einen Bereich aus oder erstellen Sie einen.",
     "selectTeamFirst": "Wählen Sie ein Team aus, um dessen Notizen zu sehen.",
     "viewOnly": "Nur Ansicht",
-    "untitledNote": "Unbenannte Notiz"
+    "untitledNote": "Unbenannte Notiz",
+    "loadMore": "Mehr laden",
+    "searchPlaceholder": "Notizen und Seiten durchsuchen…",
+    "searching": "Wird gesucht…",
+    "noResults": "Keine Ergebnisse.",
+    "notIndexedYet": "Noch nicht verlinkbar — die Seitenindizierung für die Suche steht noch aus"
   },
   "footer": {
     "tagline": "Notizen & Seiten"
