@@ -26,6 +26,74 @@ interface Props {
   noteId: string;
 }
 
+function Icon({ children }: { children: React.ReactNode }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" className="w-4 h-4">
+      {children}
+    </svg>
+  );
+}
+
+// Same w-6/h-6 icon-button shape as MarkdownToolbar/EditorToolbar, so
+// these read as the same family of control rather than a one-off.
+function IconButton({
+  title,
+  onClick,
+  disabled,
+  danger,
+  children,
+}: {
+  title: string;
+  onClick: () => void;
+  disabled?: boolean;
+  danger?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      onClick={onClick}
+      disabled={disabled}
+      className={`w-6 h-6 rounded flex items-center justify-center transition-colors disabled:opacity-40 ${
+        danger ? "text-slate-400 hover:text-red-600 hover:bg-red-50" : "text-slate-400 hover:text-rose-700 hover:bg-slate-100"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+const historyIcon = (
+  <Icon>
+    <circle cx="8" cy="8.5" r="5.5" />
+    <path d="M8 5.5v3l2.2 1.3" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M5.3 2.3 3.3 3.7M10.7 2.3l2 1.4" strokeLinecap="round" />
+  </Icon>
+);
+
+const saveVersionIcon = (
+  <Icon>
+    <path d="M3 2.5h7.5L13 5v8a.5.5 0 0 1-.5.5h-9A.5.5 0 0 1 3 13V3a.5.5 0 0 1 .5-.5Z" strokeLinejoin="round" />
+    <path d="M5.5 2.5v3h4v-3" strokeLinejoin="round" />
+    <path d="M5.5 9h5v4.5h-5V9Z" strokeLinejoin="round" />
+  </Icon>
+);
+
+const editIcon = (
+  <Icon>
+    <path d="M10.5 2.5 13.5 5.5 5.5 13.5H2.5v-3L10.5 2.5Z" strokeLinejoin="round" />
+  </Icon>
+);
+
+const deleteIcon = (
+  <Icon>
+    <path d="M3 4.5h10M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M4.5 4.5 5 13a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1l.5-8.5" strokeLinecap="round" strokeLinejoin="round" />
+  </Icon>
+);
+
 /** A Note's own title/visibility/body/edit UI, and its full reply thread.
  * Unlike Pages, Notes have no live collaborative editing -- editing is an
  * explicit request/response cycle (Save button), matching the backend's
@@ -270,23 +338,18 @@ export default function NoteThread({ noteId }: Props) {
             {editedSinceLastVersion && ` · ${t("editedSinceSave")}`}
           </span>
         )}
-        <button type="button" onClick={() => setHistoryOpen(true)} className="text-xs text-slate-500 hover:text-rose-700">
-          {t("versionHistory")}
-        </button>
+        <IconButton title={t("versionHistory")} onClick={() => setHistoryOpen(true)}>
+          {historyIcon}
+        </IconButton>
         {canEdit && (
-          <button
-            type="button"
-            onClick={saveAsVersion}
-            disabled={creatingVersion}
-            className="text-xs text-slate-500 hover:text-rose-700 disabled:opacity-50"
-          >
-            {creatingVersion ? t("saving") : t("createVersion")}
-          </button>
+          <IconButton title={t("createVersion")} onClick={saveAsVersion} disabled={creatingVersion}>
+            {saveVersionIcon}
+          </IconButton>
         )}
         {canEdit && !editing && (
-          <button type="button" onClick={() => setEditing(true)} className="text-xs text-slate-500 hover:text-rose-700">
-            {t("edit")}
-          </button>
+          <IconButton title={t("edit")} onClick={() => setEditing(true)}>
+            {editIcon}
+          </IconButton>
         )}
       </div>
 
@@ -433,26 +496,21 @@ function ReplyItem({ reply, authorName, canEdit, onSave, onDelete, onCreateVersi
         </span>
         <div className="flex-1" />
         {!confirmingDelete && (
-          <button type="button" onClick={() => setHistoryOpen(true)} className="text-xs text-slate-400 hover:text-rose-700">
-            {t("history")}
-          </button>
+          <IconButton title={t("history")} onClick={() => setHistoryOpen(true)}>
+            {historyIcon}
+          </IconButton>
         )}
         {canEdit && !editing && !confirmingDelete && (
           <>
-            <button
-              type="button"
-              onClick={handleCreateVersion}
-              disabled={creatingVersion}
-              className="text-xs text-slate-400 hover:text-rose-700 disabled:opacity-50"
-            >
-              {creatingVersion ? t("saving") : t("createVersion")}
-            </button>
-            <button type="button" onClick={() => setEditing(true)} className="text-xs text-slate-400 hover:text-rose-700">
-              {t("edit")}
-            </button>
-            <button type="button" onClick={() => setConfirmingDelete(true)} className="text-xs text-slate-400 hover:text-rose-700">
-              {t("delete")}
-            </button>
+            <IconButton title={t("createVersion")} onClick={handleCreateVersion} disabled={creatingVersion}>
+              {saveVersionIcon}
+            </IconButton>
+            <IconButton title={t("edit")} onClick={() => setEditing(true)}>
+              {editIcon}
+            </IconButton>
+            <IconButton title={t("delete")} onClick={() => setConfirmingDelete(true)} danger>
+              {deleteIcon}
+            </IconButton>
           </>
         )}
         {confirmingDelete && (
