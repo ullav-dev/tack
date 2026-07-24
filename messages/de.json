@@ -8,7 +8,21 @@
   "nav": {
     "signIn": "Anmelden",
     "signOut": "Abmelden",
-    "myDetails": "Mein Profil"
+    "myDetails": "Mein Profil",
+    "spaces": "Bereiche",
+    "notes": "Notizen"
+  },
+  "navigator": {
+    "spaces": "Bereiche",
+    "notes": "Notizen",
+    "loading": "Wird geladen…",
+    "noSpaces": "Noch keine Bereiche.",
+    "noPages": "Noch keine Seiten.",
+    "noNotes": "Noch keine Notizen.",
+    "selectSpace": "Wählen Sie links einen Bereich aus oder erstellen Sie einen.",
+    "selectTeamFirst": "Wählen Sie ein Team aus, um dessen Notizen zu sehen.",
+    "viewOnly": "Nur Ansicht",
+    "untitledNote": "Unbenannte Notiz"
   },
   "footer": {
     "tagline": "Notizen & Seiten"

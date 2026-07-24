@@ -8,7 +8,21 @@
   "nav": {
     "signIn": "Sign in",
     "signOut": "Sign out",
-    "myDetails": "My Details"
+    "myDetails": "My Details",
+    "spaces": "Spaces",
+    "notes": "Notes"
+  },
+  "navigator": {
+    "spaces": "Spaces",
+    "notes": "Notes",
+    "loading": "Loading…",
+    "noSpaces": "No spaces yet.",
+    "noPages": "No pages yet.",
+    "noNotes": "No notes yet.",
+    "selectSpace": "Select a space from the left, or create one.",
+    "selectTeamFirst": "Select a team to see its notes.",
+    "viewOnly": "View only",
+    "untitledNote": "Untitled note"
   },
   "footer": {
     "tagline": "Notes & Pages"

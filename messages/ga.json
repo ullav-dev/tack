@@ -8,7 +8,21 @@
   "nav": {
     "signIn": "Sínigh isteach",
     "signOut": "Logáil amach",
-    "myDetails": "Mo Shonraí"
+    "myDetails": "Mo Shonraí",
+    "spaces": "Spásanna",
+    "notes": "Nótaí"
+  },
+  "navigator": {
+    "spaces": "Spásanna",
+    "notes": "Nótaí",
+    "loading": "Á lódáil…",
+    "noSpaces": "Níl aon spásanna ann fós.",
+    "noPages": "Níl aon leathanaigh ann fós.",
+    "noNotes": "Níl aon nótaí ann fós.",
+    "selectSpace": "Roghnaigh spás ar chlé, nó cruthaigh ceann.",
+    "selectTeamFirst": "Roghnaigh foireann chun a nótaí a fheiceáil.",
+    "viewOnly": "Amharc amháin",
+    "untitledNote": "Nóta gan teideal"
   },
   "footer": {
     "tagline": "Nótaí & Leathanaigh"
