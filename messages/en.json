@@ -28,7 +28,15 @@
     "searchPlaceholder": "Search notes and pages…",
     "searching": "Searching…",
     "noResults": "No results.",
-    "notIndexedYet": "Not yet linkable — page search indexing is still pending"
+    "notIndexedYet": "Not yet linkable — page search indexing is still pending",
+    "newPage": "New page",
+    "newPageTitle": "Page title…"
+  },
+  "editor": {
+    "loading": "Loading…",
+    "viewOnly": "View only",
+    "allChangesSaved": "All changes saved",
+    "syncing": "Syncing…"
   },
   "footer": {
     "tagline": "Notes & Pages"

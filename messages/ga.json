@@ -28,7 +28,15 @@
     "searchPlaceholder": "Cuardaigh nótaí agus leathanaigh…",
     "searching": "Ag cuardach…",
     "noResults": "Níl aon toradh ann.",
-    "notIndexedYet": "Níl sé inlasctha fós — tá innéacsú cuardaigh na leathanach fós ar feitheamh"
+    "notIndexedYet": "Níl sé inlasctha fós — tá innéacsú cuardaigh na leathanach fós ar feitheamh",
+    "newPage": "Leathanach nua",
+    "newPageTitle": "Teideal an leathanaigh…"
+  },
+  "editor": {
+    "loading": "Á lódáil…",
+    "viewOnly": "Amharc amháin",
+    "allChangesSaved": "Gach athrú sábháilte",
+    "syncing": "Ag sioncronú…"
   },
   "footer": {
     "tagline": "Nótaí & Leathanaigh"
