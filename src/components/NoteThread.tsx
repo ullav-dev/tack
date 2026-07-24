@@ -13,6 +13,7 @@ import {
   listReplies,
   updateNote,
   type Note,
+  type Visibility,
 } from "@/lib/tack-server-api";
 import NoteMarkdown from "@/components/NoteMarkdown";
 import MarkdownComposer from "@/components/MarkdownComposer";
@@ -23,12 +24,15 @@ interface Props {
   noteId: string;
 }
 
-/** A Note's own title/body/edit UI, and its full reply thread. Unlike
- * Pages, Notes have no live collaborative editing -- editing is an explicit
- * request/response cycle (Save button), matching the backend's
+/** A Note's own title/visibility/body/edit UI, and its full reply thread.
+ * Unlike Pages, Notes have no live collaborative editing -- editing is an
+ * explicit request/response cycle (Save button), matching the backend's
  * single-writer markdown model. `canEdit` mirrors `notes_acl.rs`'s exact
  * rule (creator or admin) client-side for UI purposes only -- the backend
- * still enforces this authoritatively on every PATCH/reply.
+ * still enforces this authoritatively on every PATCH/reply. Visibility is
+ * changed immediately on selection (no separate Save step), same as the
+ * title's save-on-blur pattern -- both are metadata fields, not part of the
+ * body-edit/version flow.
  *
  * A "Save as version" button calls `createRevision` explicitly -- editing
  * the body (Save) no longer implicitly creates a revision server-side; a
@@ -47,6 +51,8 @@ export default function NoteThread({ noteId }: Props) {
 
   const [titleDraft, setTitleDraft] = useState("");
   const [titleSaving, setTitleSaving] = useState(false);
+
+  const [visibilitySaving, setVisibilitySaving] = useState(false);
 
   const [editing, setEditing] = useState(false);
   const [bodyDraft, setBodyDraft] = useState("");
@@ -107,6 +113,19 @@ export default function NoteThread({ noteId }: Props) {
       setError((e as Error).message);
     } finally {
       setTitleSaving(false);
+    }
+  }
+
+  async function saveVisibility(next: Visibility) {
+    if (!token || !note || next === note.visibility) return;
+    setVisibilitySaving(true);
+    try {
+      const updated = await updateNote(token, note.id, { visibility: next });
+      setNote(updated);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setVisibilitySaving(false);
     }
   }
 
@@ -178,9 +197,22 @@ export default function NoteThread({ noteId }: Props) {
       </div>
 
       <div className="flex items-center gap-2">
-        <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
-          {t(`visibility.${note.visibility}`)}
-        </span>
+        {canEdit ? (
+          <select
+            value={note.visibility}
+            onChange={(e) => saveVisibility(e.target.value as Visibility)}
+            disabled={visibilitySaving}
+            className="text-xs px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 border-none focus:outline-none focus:ring-1 focus:ring-rose-400 disabled:opacity-50"
+          >
+            <option value="private">{t("visibility.private")}</option>
+            <option value="team">{t("visibility.team")}</option>
+            <option value="organization">{t("visibility.organization")}</option>
+          </select>
+        ) : (
+          <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
+            {t(`visibility.${note.visibility}`)}
+          </span>
+        )}
         <span className="text-xs text-slate-400">
           {t("editedBy", { name: resolveAuthor(note.created_by) })} · {new Date(note.created_at).toLocaleString()}
         </span>
