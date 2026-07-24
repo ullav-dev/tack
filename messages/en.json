@@ -30,13 +30,40 @@
     "noResults": "No results.",
     "notIndexedYet": "Not yet linkable — page search indexing is still pending",
     "newPage": "New page",
-    "newPageTitle": "Page title…"
+    "newPageTitle": "Page title…",
+    "newNote": "New note"
   },
   "editor": {
     "loading": "Loading…",
     "viewOnly": "View only",
     "allChangesSaved": "All changes saved",
     "syncing": "Syncing…"
+  },
+  "notes": {
+    "write": "Write",
+    "preview": "Preview",
+    "nothingToPreview": "Nothing to preview yet.",
+    "versionHistory": "Version history",
+    "close": "Close",
+    "version": "Version {n}",
+    "loading": "Loading…",
+    "noVersions": "No versions yet.",
+    "edit": "Edit",
+    "cancel": "Cancel",
+    "saving": "Saving…",
+    "save": "Save",
+    "replyPlaceholder": "Write a reply…",
+    "reply": "Reply",
+    "titlePlaceholder": "Title…",
+    "createVersion": "Save as version",
+    "versionCreated": "Version saved.",
+    "editedBy": "by {name}",
+    "refresh": "Refresh",
+    "visibility": {
+      "private": "Private",
+      "team": "Team",
+      "organization": "Organization"
+    }
   },
   "footer": {
     "tagline": "Notes & Pages"

@@ -30,13 +30,40 @@
     "noResults": "Keine Ergebnisse.",
     "notIndexedYet": "Noch nicht verlinkbar — die Seitenindizierung für die Suche steht noch aus",
     "newPage": "Neue Seite",
-    "newPageTitle": "Seitentitel…"
+    "newPageTitle": "Seitentitel…",
+    "newNote": "Neue Notiz"
   },
   "editor": {
     "loading": "Wird geladen…",
     "viewOnly": "Nur Ansicht",
     "allChangesSaved": "Alle Änderungen gespeichert",
     "syncing": "Wird synchronisiert…"
+  },
+  "notes": {
+    "write": "Schreiben",
+    "preview": "Vorschau",
+    "nothingToPreview": "Noch nichts zur Vorschau.",
+    "versionHistory": "Versionsverlauf",
+    "close": "Schließen",
+    "version": "Version {n}",
+    "loading": "Wird geladen…",
+    "noVersions": "Noch keine Versionen.",
+    "edit": "Bearbeiten",
+    "cancel": "Abbrechen",
+    "saving": "Wird gespeichert…",
+    "save": "Speichern",
+    "replyPlaceholder": "Antwort schreiben…",
+    "reply": "Antworten",
+    "titlePlaceholder": "Titel…",
+    "createVersion": "Als Version speichern",
+    "versionCreated": "Version gespeichert.",
+    "editedBy": "von {name}",
+    "refresh": "Aktualisieren",
+    "visibility": {
+      "private": "Privat",
+      "team": "Team",
+      "organization": "Organisation"
+    }
   },
   "footer": {
     "tagline": "Notizen & Seiten"

@@ -90,6 +90,8 @@ export interface Note {
   team_id: string | null;
   parent_id: string | null;
   visibility: Visibility;
+  /** Empty for replies -- only top-level notes collect a title. */
+  title: string;
   body_markdown: string;
   created_by: string;
   created_at: string;
@@ -126,13 +128,13 @@ export const getNote = (token: string, id: string): Promise<Note> => apiRequest(
 
 export const createNote = (
   token: string,
-  payload: { team_id: string; visibility: Visibility; body_markdown: string }
+  payload: { team_id: string; visibility: Visibility; title: string; body_markdown: string }
 ): Promise<Note> => apiRequest("/notes", token, { method: "POST", body: JSON.stringify(payload) });
 
 export const updateNote = (
   token: string,
   id: string,
-  payload: { body_markdown?: string; visibility?: Visibility }
+  payload: { title?: string; body_markdown?: string; visibility?: Visibility }
 ): Promise<Note> => apiRequest(`/notes/${id}`, token, { method: "PATCH", body: JSON.stringify(payload) });
 
 export const listReplies = (token: string, id: string): Promise<Note[]> => apiRequest(`/notes/${id}/replies`, token);
@@ -142,6 +144,11 @@ export const createReply = (token: string, id: string, body_markdown: string): P
 
 export const listRevisions = (token: string, id: string): Promise<NoteRevision[]> =>
   apiRequest(`/notes/${id}/revisions`, token);
+
+/** Snapshots the note's current body as a new named version — a deliberate
+ * action (button click), not an automatic side effect of every save. */
+export const createRevision = (token: string, id: string): Promise<NoteRevision> =>
+  apiRequest(`/notes/${id}/revisions`, token, { method: "POST" });
 
 // ── Search ────────────────────────────────────────────────────────────────────
 

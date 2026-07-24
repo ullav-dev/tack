@@ -30,13 +30,40 @@
     "noResults": "Níl aon toradh ann.",
     "notIndexedYet": "Níl sé inlasctha fós — tá innéacsú cuardaigh na leathanach fós ar feitheamh",
     "newPage": "Leathanach nua",
-    "newPageTitle": "Teideal an leathanaigh…"
+    "newPageTitle": "Teideal an leathanaigh…",
+    "newNote": "Nóta nua"
   },
   "editor": {
     "loading": "Á lódáil…",
     "viewOnly": "Amharc amháin",
     "allChangesSaved": "Gach athrú sábháilte",
     "syncing": "Ag sioncronú…"
+  },
+  "notes": {
+    "write": "Scríobh",
+    "preview": "Réamhamharc",
+    "nothingToPreview": "Níl aon rud le réamhamharc fós.",
+    "versionHistory": "Stair leaganacha",
+    "close": "Dún",
+    "version": "Leagan {n}",
+    "loading": "Á lódáil…",
+    "noVersions": "Níl aon leaganacha ann fós.",
+    "edit": "Cuir in eagar",
+    "cancel": "Cealaigh",
+    "saving": "Á shábháil…",
+    "save": "Sábháil",
+    "replyPlaceholder": "Scríobh freagra…",
+    "reply": "Freagair",
+    "titlePlaceholder": "Teideal…",
+    "createVersion": "Sábháil mar leagan",
+    "versionCreated": "Leagan sábháilte.",
+    "editedBy": "ag {name}",
+    "refresh": "Athnuachan",
+    "visibility": {
+      "private": "Príobháideach",
+      "team": "Foireann",
+      "organization": "Eagraíocht"
+    }
   },
   "footer": {
     "tagline": "Nótaí & Leathanaigh"
