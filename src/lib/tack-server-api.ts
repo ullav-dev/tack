@@ -80,6 +80,13 @@ export const updatePage = (
 export const getPagePermission = (token: string, id: string): Promise<{ level: PermissionLevel }> =>
   apiRequest(`/pages/${id}/permission`, token);
 
+/** Soft-deletes a page. Does NOT cascade to child pages (a deliberate,
+ * documented backend simplification) -- the frontend only allows this when
+ * `child_count === 0`, so this never actually creates orphaned children in
+ * practice; see PageEditor.tsx. */
+export const deletePage = (token: string, id: string): Promise<void> =>
+  apiRequest(`/pages/${id}`, token, { method: "DELETE" });
+
 // ── Notes ─────────────────────────────────────────────────────────────────────
 
 export type Visibility = "private" | "team" | "organization";

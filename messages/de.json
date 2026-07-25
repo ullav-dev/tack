@@ -38,7 +38,13 @@
     "loading": "Wird geladen…",
     "viewOnly": "Nur Ansicht",
     "allChangesSaved": "Alle Änderungen gespeichert",
-    "syncing": "Wird synchronisiert…"
+    "syncing": "Wird synchronisiert…",
+    "deletePage": "Seite löschen",
+    "deletePageBlocked": "Verschieben oder löschen Sie zuerst die Unterseiten dieser Seite",
+    "deletePageConfirmTitle": "Diese Seite löschen?",
+    "deletePageConfirmBody": "Dies kann nicht rückgängig gemacht werden.",
+    "deleteCancel": "Behalten",
+    "deleting": "Wird gelöscht…"
   },
   "notes": {
     "write": "Schreiben",

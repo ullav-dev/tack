@@ -38,7 +38,13 @@
     "loading": "Loading…",
     "viewOnly": "View only",
     "allChangesSaved": "All changes saved",
-    "syncing": "Syncing…"
+    "syncing": "Syncing…",
+    "deletePage": "Delete page",
+    "deletePageBlocked": "Move or delete this page's child pages first",
+    "deletePageConfirmTitle": "Delete this page?",
+    "deletePageConfirmBody": "This can't be undone.",
+    "deleteCancel": "Keep it",
+    "deleting": "Deleting…"
   },
   "notes": {
     "write": "Write",

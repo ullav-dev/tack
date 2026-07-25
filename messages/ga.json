@@ -38,7 +38,13 @@
     "loading": "Á lódáil…",
     "viewOnly": "Amharc amháin",
     "allChangesSaved": "Gach athrú sábháilte",
-    "syncing": "Ag sioncronú…"
+    "syncing": "Ag sioncronú…",
+    "deletePage": "Scrios an leathanach",
+    "deletePageBlocked": "Bog nó scrios fo-leathanaigh an leathanaigh seo ar dtús",
+    "deletePageConfirmTitle": "An leathanach seo a scriosadh?",
+    "deletePageConfirmBody": "Ní féidir é seo a chur ar ceal.",
+    "deleteCancel": "Coinnigh é",
+    "deleting": "Á scriosadh…"
   },
   "notes": {
     "write": "Scríobh",

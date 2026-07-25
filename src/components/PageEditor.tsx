@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
+import { useRouter } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -14,9 +15,10 @@ import * as Y from "yjs";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePageEvents } from "@/contexts/PageEventsContext";
 import type { AuthUser } from "@/lib/auth-api";
-import { getPage, getPagePermission, updatePage, type Page, type PermissionLevel } from "@/lib/tack-server-api";
+import { deletePage, getPage, getPagePermission, updatePage, type Page, type PermissionLevel } from "@/lib/tack-server-api";
 import { displayName } from "@/lib/user-display";
 import EditorToolbar from "@/components/EditorToolbar";
+import DeletePageModal from "@/components/DeletePageModal";
 import DamAssetNode from "@/tiptap/DamAssetNode";
 
 const HOCUSPOCUS_URL = process.env.NEXT_PUBLIC_HOCUSPOCUS_URL ?? "ws://localhost:8088";
@@ -49,11 +51,20 @@ interface PresenceEntry {
  * security boundary. tack-hocuspocus independently enforces view/edit
  * access itself server-side (see its `onAuthenticate` hook), already
  * verified to silently reject a view-only user's writes even if this
- * client-side gate were bypassed. */
+ * client-side gate were bypassed.
+ *
+ * Delete (F7): tack-server's soft-delete doesn't cascade to child pages
+ * (a deliberate, documented backend simplification), so the delete button
+ * is disabled whenever `child_count > 0` -- the user has to move or delete
+ * children first, rather than the frontend ever creating pages that are
+ * still there but unreachable from the tree. Navigates to the space's own
+ * landing route afterward and broadcasts the deletion via
+ * `notifyPageDeleted` so the Navigator's PageTree drops it immediately. */
 export default function PageEditor() {
-  const { pageId } = useParams<{ pageId: string }>();
+  const { spaceId, pageId } = useParams<{ spaceId: string; pageId: string }>();
   const { token, user } = useAuth();
-  const { notifyPageUpdated } = usePageEvents();
+  const { notifyPageUpdated, notifyPageDeleted } = usePageEvents();
+  const router = useRouter();
   const t = useTranslations("editor");
 
   const [page, setPage] = useState<Page | null>(null);
@@ -64,6 +75,7 @@ export default function PageEditor() {
 
   const [titleDraft, setTitleDraft] = useState("");
   const [titleSaving, setTitleSaving] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
   const ydocRef = useRef<Y.Doc | null>(null);
   if (!ydocRef.current) ydocRef.current = new Y.Doc();
@@ -150,6 +162,13 @@ export default function PageEditor() {
     }
   }
 
+  async function deleteThisPage() {
+    if (!token || !page) return;
+    await deletePage(token, page.id);
+    notifyPageDeleted(page.id);
+    router.push(`/spaces/${spaceId}/pages`);
+  }
+
   if (loadError) return <p className="p-6 text-red-600">{loadError}</p>;
   if (!page || level === null) return <p className="p-6 text-slate-400">{t("loading")}</p>;
 
@@ -179,6 +198,22 @@ export default function PageEditor() {
           </span>
         )}
 
+        {editable && (
+          <button
+            type="button"
+            title={page.child_count > 0 ? t("deletePageBlocked") : t("deletePage")}
+            aria-label={t("deletePage")}
+            onClick={() => setDeleteModalOpen(true)}
+            disabled={page.child_count > 0}
+            className="shrink-0 w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-400 transition-colors"
+          >
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" className="w-4 h-4">
+              <path d="M3 4.5h10M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M4.5 4.5 5 13a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1l.5-8.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        )}
+
         {presence.length > 0 && (
           <div className="flex -space-x-1.5 shrink-0" title={presence.map((p) => p.name).join(", ")}>
             {presence.slice(0, 5).map((p, i) => (
@@ -204,6 +239,10 @@ export default function PageEditor() {
         <PageEditorContent ydoc={ydocRef.current!} provider={providerRef.current!} editable={editable} user={user} title={page.title} />
       ) : (
         <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">{t("syncing")}</div>
+      )}
+
+      {deleteModalOpen && (
+        <DeletePageModal onConfirm={deleteThisPage} onCancel={() => setDeleteModalOpen(false)} />
       )}
     </div>
   );

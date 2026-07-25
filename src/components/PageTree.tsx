@@ -31,7 +31,7 @@ const ROOT_KEY = "";
 export default function PageTree({ spaceId }: Props) {
   const { token } = useAuth();
   const router = useRouter();
-  const { subscribe } = usePageEvents();
+  const { subscribe, subscribeDeleted } = usePageEvents();
   const t = useTranslations("navigator");
   const params = useParams<{ pageId?: string }>();
   const selectedPageId = params.pageId;
@@ -103,6 +103,21 @@ export default function PageTree({ spaceId }: Props) {
       setChildren(childrenRef.current);
     });
   }, [subscribe]);
+
+  // PageEditor also broadcasts when the page itself was deleted (only ever
+  // a leaf -- delete is blocked client-side while child_count > 0 -- so
+  // there's no orphaned-subtree cleanup to do here beyond dropping its own
+  // now-stale cached children entry, if it had one).
+  useEffect(() => {
+    return subscribeDeleted((pageId) => {
+      childrenRef.current = Object.fromEntries(
+        Object.entries(childrenRef.current)
+          .filter(([parentId]) => parentId !== pageId)
+          .map(([parentId, pages]) => [parentId, pages.filter((p) => p.id !== pageId)])
+      );
+      setChildren(childrenRef.current);
+    });
+  }, [subscribeDeleted]);
 
   async function handleCreate(parentId: string) {
     const title = newTitle.trim();
