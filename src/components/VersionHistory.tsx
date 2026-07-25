@@ -3,12 +3,17 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/contexts/AuthContext";
-import { deleteRevision, listRevisions, type Note, type NoteRevision } from "@/lib/tack-server-api";
+import { deleteRevision, listReplies, listRevisions, type Note, type NoteRevision } from "@/lib/tack-server-api";
 import NoteMarkdown from "@/components/NoteMarkdown";
 import ResizableSplit from "@/components/ResizableSplit";
 
 interface Props {
   noteId: string;
+  /** The note's (or reply's) own title, shown in the header so it's clear
+   * which note's history this is -- the drawer otherwise carries no
+   * identifying text of its own. Empty/omitted for a reply, which never has
+   * its own title. */
+  title?: string;
   canEdit: boolean;
   /** The note's own replies, if any -- passed down so each version can show
    * only the replies that were made while it was current (see
@@ -20,6 +25,11 @@ interface Props {
    * "Version N" badge) stay in sync when a version is deleted in here,
    * without a full refetch. */
   onRevisionsChanged?: (revisions: NoteRevision[]) => void;
+  /** Same idea, for replies: deleting a version can reassign replies tagged
+   * to it (see tack-server's `delete_revision`), so the parent's own
+   * `replies` state needs to pick up the new tags too, not just this
+   * drawer's local copy used for filtering. */
+  onRepliesChanged?: (replies: Note[]) => void;
 }
 
 function Icon({ children }: { children: React.ReactNode }) {
@@ -49,7 +59,15 @@ const deleteIcon = (
  * just `x`, so the list column has no upper clamp. The drawer's own outer
  * width is widened (not the old fixed `max-w-lg`) so that resize has
  * meaningful room to work with. */
-export default function VersionHistory({ noteId, canEdit, replies, onClose, onRevisionsChanged }: Props) {
+export default function VersionHistory({
+  noteId,
+  title,
+  canEdit,
+  replies,
+  onClose,
+  onRevisionsChanged,
+  onRepliesChanged,
+}: Props) {
   const { token } = useAuth();
   const t = useTranslations("notes");
   const [revisions, setRevisions] = useState<NoteRevision[] | null>(null);
@@ -85,6 +103,13 @@ export default function VersionHistory({ noteId, canEdit, replies, onClose, onRe
       onRevisionsChanged?.(next);
       if (selected?.id === revisionId) setSelected(next[0] ?? null);
       setConfirmingDeleteId(null);
+      // Deleting a version can reassign replies that were tagged to it (see
+      // tack-server's delete_revision) -- refetch so both this drawer's own
+      // filtering and the parent's cached list pick up the new tags.
+      if (replies) {
+        const updatedReplies = await listReplies(token, noteId);
+        onRepliesChanged?.(updatedReplies);
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -110,8 +135,11 @@ export default function VersionHistory({ noteId, canEdit, replies, onClose, onRe
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 shrink-0">
-          <h2 className="font-semibold text-slate-800">{t("versionHistory")}</h2>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600 text-sm">
+          <div className="min-w-0">
+            <h2 className="font-semibold text-slate-800">{t("versionHistory")}</h2>
+            {title && <p className="text-xs text-slate-400 truncate">{title}</p>}
+          </div>
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600 text-sm shrink-0">
             {t("close")}
           </button>
         </div>

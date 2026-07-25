@@ -466,9 +466,11 @@ export default function NoteThread({ noteId }: Props) {
       {historyOpen && (
         <VersionHistory
           noteId={note.id}
+          title={note.title}
           canEdit={canEdit}
           replies={replies}
           onRevisionsChanged={setRevisions}
+          onRepliesChanged={setReplies}
           onClose={() => setHistoryOpen(false)}
         />
       )}
