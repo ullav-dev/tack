@@ -69,6 +69,9 @@
     "deleteNote": "Notiz löschen",
     "deleteNoteConfirmTitle": "Diese Notiz löschen?",
     "deleteNoteConfirmBody": "Dadurch werden die Notiz, alle gespeicherten Versionen und alle Antworten gelöscht. Dies kann nicht rückgängig gemacht werden.",
+    "viewThisVersion": "Diese Version anzeigen",
+    "viewingOldVersion": "Version {n} wird angezeigt — nicht die aktuellste",
+    "showLatest": "Aktuellste anzeigen",
     "visibility": {
       "private": "Privat",
       "team": "Team",

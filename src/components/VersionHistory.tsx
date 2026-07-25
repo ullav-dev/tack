@@ -30,6 +30,12 @@ interface Props {
    * `replies` state needs to pick up the new tags too, not just this
    * drawer's local copy used for filtering. */
   onRepliesChanged?: (replies: Note[]) => void;
+  /** Makes the selected version the one shown in the main note/reply view
+   * (read-only, alongside that version's own scoped replies) instead of the
+   * live current state. Omitted for a reply's own history drawer -- a
+   * reply's inline view doesn't currently support "viewing an old version"
+   * the way the top-level note does. */
+  onSelectVersion?: (revision: NoteRevision) => void;
 }
 
 function Icon({ children }: { children: React.ReactNode }) {
@@ -67,6 +73,7 @@ export default function VersionHistory({
   onClose,
   onRevisionsChanged,
   onRepliesChanged,
+  onSelectVersion,
 }: Props) {
   const { token } = useAuth();
   const t = useTranslations("notes");
@@ -207,6 +214,18 @@ export default function VersionHistory({
                   )}
                   {selected ? (
                     <>
+                      {onSelectVersion && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onSelectVersion(selected);
+                            onClose();
+                          }}
+                          className="text-xs font-medium text-rose-700 hover:text-rose-900 border border-rose-200 hover:border-rose-300 rounded px-2 py-1"
+                        >
+                          {t("viewThisVersion")}
+                        </button>
+                      )}
                       <NoteMarkdown body={selected.body_markdown} />
                       {selectedReplies.length > 0 && (
                         <div className="border-t border-slate-200 pt-3 space-y-3">

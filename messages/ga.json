@@ -69,6 +69,9 @@
     "deleteNote": "Scrios an nóta",
     "deleteNoteConfirmTitle": "An nóta seo a scriosadh?",
     "deleteNoteConfirmBody": "Scriosfaidh sé seo an nóta, gach leagan sábháilte, agus gach freagra. Ní féidir é seo a chur ar ceal.",
+    "viewThisVersion": "Féach ar an leagan seo",
+    "viewingOldVersion": "Ag féachaint ar leagan {n} — ní hé an ceann is déanaí é",
+    "showLatest": "Taispeáin an ceann is déanaí",
     "visibility": {
       "private": "Príobháideach",
       "team": "Foireann",

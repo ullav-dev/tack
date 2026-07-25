@@ -142,7 +142,19 @@ const deleteIcon = (
  *
  * Deleting the note itself (not a version) opens `DeleteNoteModal` --
  * cascades to every version and reply server-side, so it needs an explicit,
- * properly worded confirmation rather than an inline icon-click. */
+ * properly worded confirmation rather than an inline icon-click.
+ *
+ * "View this version" in the history drawer sets `viewingRevision`, which
+ * swaps the main panel into a read-only view of that snapshot (body +
+ * that version's own scoped replies) with an amber-tinted banner and body
+ * background so it's visually obvious this isn't the live state, plus a
+ * "Show latest" button to snap back. Selecting the version that already
+ * *is* the latest is treated as "show latest" (clears `viewingRevision`
+ * rather than pointlessly setting it), so the banner never shows for the
+ * current state. All edit affordances (title, visibility, body edit,
+ * "Save as version", delete-note, replying) are gated on `!viewingRevision`
+ * too -- editing a historical snapshot in place doesn't make sense; the
+ * user has to return to latest first. */
 export default function NoteThread({ noteId }: Props) {
   const { token, user } = useAuth();
   const { notifyNoteUpdated, notifyNoteDeleted, subscribeRefresh } = useNoteEvents();
@@ -171,6 +183,7 @@ export default function NoteThread({ noteId }: Props) {
 
   const [historyOpen, setHistoryOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [viewingRevision, setViewingRevision] = useState<NoteRevision | null>(null);
 
   const resolveAuthor = useTeamRoster(note?.team_id ?? null);
   const canEditReply = (reply: Note) => Boolean(user) && (user!.id === reply.created_by || isAdmin(token));
@@ -178,6 +191,7 @@ export default function NoteThread({ noteId }: Props) {
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
+    setViewingRevision(null);
     Promise.all([getNote(token, noteId), listReplies(token, noteId), listRevisions(token, noteId)])
       .then(([n, r, rv]) => {
         if (cancelled) return;
@@ -315,21 +329,28 @@ export default function NoteThread({ noteId }: Props) {
   const latestRevision = revisions?.[0] ?? null;
   const editedSinceLastVersion = latestRevision !== null && latestRevision.body_markdown !== note.body_markdown;
 
-  // Only show replies made against the version currently being viewed
-  // (here, always "current" -- the live body). A reply with no recorded
-  // version (created before `in_reply_to_version` existed) is treated as
-  // always-current, matching its old always-visible behavior.
-  const currentReplies = replies.filter(
-    (r) => r.in_reply_to_version === null || r.in_reply_to_version === latestRevision?.version
+  function handleSelectVersion(revision: NoteRevision) {
+    setViewingRevision(revision.version === latestRevision?.version ? null : revision);
+  }
+
+  // While viewingRevision is set, the main panel shows that snapshot (and
+  // its own scoped replies) instead of the live current state -- otherwise
+  // both show "current". A reply with no recorded version (created before
+  // `in_reply_to_version` existed) is treated as always-current, matching
+  // its old always-visible behavior.
+  const displayedVersion = viewingRevision?.version ?? latestRevision?.version ?? null;
+  const displayedBody = viewingRevision ? viewingRevision.body_markdown : note.body_markdown;
+  const displayedReplies = replies.filter(
+    (r) => r.in_reply_to_version === displayedVersion || (r.in_reply_to_version === null && !viewingRevision)
   );
-  const olderReplies = replies.filter(
-    (r) => r.in_reply_to_version !== null && r.in_reply_to_version !== latestRevision?.version
-  );
+  const olderReplies = viewingRevision
+    ? []
+    : replies.filter((r) => r.in_reply_to_version !== null && r.in_reply_to_version !== displayedVersion);
 
   return (
     <div className="p-6 max-w-3xl space-y-6">
       <div className="flex items-center gap-3">
-        {canEdit ? (
+        {canEdit && !viewingRevision ? (
           <input
             value={titleDraft}
             onChange={(e) => setTitleDraft(e.target.value)}
@@ -347,7 +368,7 @@ export default function NoteThread({ noteId }: Props) {
       </div>
 
       <div className="flex items-center gap-2">
-        {canEdit ? (
+        {canEdit && !viewingRevision ? (
           <select
             value={note.visibility}
             onChange={(e) => saveVisibility(e.target.value as Visibility)}
@@ -367,7 +388,7 @@ export default function NoteThread({ noteId }: Props) {
           {t("editedBy", { name: resolveAuthor(note.created_by) })} · {new Date(note.created_at).toLocaleString()}
         </span>
         <div className="flex-1" />
-        {latestRevision && (
+        {latestRevision && !viewingRevision && (
           <span className="text-xs text-slate-400">
             {t("version", { n: latestRevision.version })}
             {editedSinceLastVersion && ` · ${t("editedSinceSave")}`}
@@ -376,22 +397,35 @@ export default function NoteThread({ noteId }: Props) {
         <IconButton title={t("versionHistory")} onClick={() => setHistoryOpen(true)}>
           {historyIcon}
         </IconButton>
-        {canEdit && (
+        {canEdit && !viewingRevision && (
           <IconButton title={t("createVersion")} onClick={saveAsVersion} disabled={creatingVersion}>
             {saveVersionIcon}
           </IconButton>
         )}
-        {canEdit && !editing && (
+        {canEdit && !editing && !viewingRevision && (
           <IconButton title={t("edit")} onClick={() => setEditing(true)}>
             {editIcon}
           </IconButton>
         )}
-        {canEdit && (
+        {canEdit && !viewingRevision && (
           <IconButton title={t("deleteNote")} onClick={() => setDeleteModalOpen(true)} danger>
             {deleteIcon}
           </IconButton>
         )}
       </div>
+
+      {viewingRevision && (
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <span>{t("viewingOldVersion", { n: viewingRevision.version })}</span>
+          <button
+            type="button"
+            onClick={() => setViewingRevision(null)}
+            className="font-medium underline hover:no-underline shrink-0"
+          >
+            {t("showLatest")}
+          </button>
+        </div>
+      )}
 
       {versionMessage && <p className="text-xs text-green-700">{versionMessage}</p>}
 
@@ -420,17 +454,19 @@ export default function NoteThread({ noteId }: Props) {
           </div>
         </div>
       ) : (
-        <NoteMarkdown body={note.body_markdown} />
+        <div className={viewingRevision ? "rounded-lg bg-amber-50/50 border border-amber-100 p-3" : undefined}>
+          <NoteMarkdown body={displayedBody} />
+        </div>
       )}
 
-      {currentReplies.length > 0 && (
+      {displayedReplies.length > 0 && (
         <div className="border-t border-slate-200 pt-4 space-y-4">
-          {currentReplies.map((reply) => (
+          {displayedReplies.map((reply) => (
             <ReplyItem
               key={reply.id}
               reply={reply}
               authorName={resolveAuthor(reply.created_by)}
-              canEdit={canEditReply(reply)}
+              canEdit={!viewingRevision && canEditReply(reply)}
               onSave={(body) => saveReplyEdit(reply.id, body)}
               onDelete={() => deleteReply(reply.id)}
               onCreateVersion={() => saveReplyVersion(reply.id)}
@@ -449,19 +485,21 @@ export default function NoteThread({ noteId }: Props) {
         </button>
       )}
 
-      <div className="border-t border-slate-200 pt-4 space-y-2">
-        <MarkdownComposer value={replyDraft} onChange={setReplyDraft} placeholder={t("replyPlaceholder")} disabled={replying} rows={3} />
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={submitReply}
-            disabled={replying || !replyDraft.trim()}
-            className="text-xs bg-rose-700 hover:bg-rose-800 disabled:opacity-50 text-white px-3 py-1 rounded"
-          >
-            {replying ? t("saving") : t("reply")}
-          </button>
+      {!viewingRevision && (
+        <div className="border-t border-slate-200 pt-4 space-y-2">
+          <MarkdownComposer value={replyDraft} onChange={setReplyDraft} placeholder={t("replyPlaceholder")} disabled={replying} rows={3} />
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={submitReply}
+              disabled={replying || !replyDraft.trim()}
+              className="text-xs bg-rose-700 hover:bg-rose-800 disabled:opacity-50 text-white px-3 py-1 rounded"
+            >
+              {replying ? t("saving") : t("reply")}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {historyOpen && (
         <VersionHistory
@@ -471,6 +509,7 @@ export default function NoteThread({ noteId }: Props) {
           replies={replies}
           onRevisionsChanged={setRevisions}
           onRepliesChanged={setReplies}
+          onSelectVersion={handleSelectVersion}
           onClose={() => setHistoryOpen(false)}
         />
       )}
