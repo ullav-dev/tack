@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useRef } from "react";
 import type { Page } from "@/lib/tack-server-api";
 
 type Listener = (pageId: string, patch: Partial<Page>) => void;
+type DeleteListener = (pageId: string) => void;
 
 interface PageEventsContextValue {
   /** Broadcasts that a page's metadata (currently just `title`) changed —
@@ -11,6 +12,11 @@ interface PageEventsContextValue {
   notifyPageUpdated: (pageId: string, patch: Partial<Page>) => void;
   /** Returns an unsubscribe function. */
   subscribe: (listener: Listener) => () => void;
+  /** Broadcasts that a page was deleted — called by PageEditor after a
+   * successful delete, so PageTree drops it from its cached children
+   * immediately rather than showing a stale (now-404ing) entry. */
+  notifyPageDeleted: (pageId: string) => void;
+  subscribeDeleted: (listener: DeleteListener) => () => void;
 }
 
 const PageEventsContext = createContext<PageEventsContextValue | null>(null);
@@ -27,6 +33,7 @@ const PageEventsContext = createContext<PageEventsContextValue | null>(null);
  */
 export function PageEventsProvider({ children }: { children: React.ReactNode }) {
   const listenersRef = useRef<Set<Listener>>(new Set());
+  const deleteListenersRef = useRef<Set<DeleteListener>>(new Set());
 
   const notifyPageUpdated = useCallback((pageId: string, patch: Partial<Page>) => {
     listenersRef.current.forEach((listener) => listener(pageId, patch));
@@ -39,8 +46,23 @@ export function PageEventsProvider({ children }: { children: React.ReactNode }) 
     };
   }, []);
 
+  const notifyPageDeleted = useCallback((pageId: string) => {
+    deleteListenersRef.current.forEach((listener) => listener(pageId));
+  }, []);
+
+  const subscribeDeleted = useCallback((listener: DeleteListener) => {
+    deleteListenersRef.current.add(listener);
+    return () => {
+      deleteListenersRef.current.delete(listener);
+    };
+  }, []);
+
   return (
-    <PageEventsContext.Provider value={{ notifyPageUpdated, subscribe }}>{children}</PageEventsContext.Provider>
+    <PageEventsContext.Provider
+      value={{ notifyPageUpdated, subscribe, notifyPageDeleted, subscribeDeleted }}
+    >
+      {children}
+    </PageEventsContext.Provider>
   );
 }
 
