@@ -110,6 +110,50 @@ export const createPageRevision = (token: string, id: string): Promise<PageRevis
 export const deletePageRevision = (token: string, pageId: string, revisionId: string): Promise<void> =>
   apiRequest(`/pages/${pageId}/revisions/${revisionId}`, token, { method: "DELETE" });
 
+/** Plain title search across an organization's pages (scoped via
+ * `spaceId`, but not narrowed to just that space -- see tack-server's
+ * `search_pages`). Backs the page reference picker; not routed through
+ * `GET /search` since Page content indexing into OpenSearch is a separate,
+ * still-pending gap. */
+export const searchPages = (token: string, spaceId: string, q: string): Promise<Page[]> =>
+  apiRequest(`/pages/search?space_id=${spaceId}&q=${encodeURIComponent(q)}`, token);
+
+/** A page-to-page cross-reference (F7 8d, scoped to page-to-page only --
+ * cross-service references, e.g. to a Togra workflow, are deferred until
+ * the owning service exposes a public resolve endpoint). Always resolved
+ * live: `target_title`/`target_space_id` are `null` if the target page no
+ * longer exists or is no longer visible to the caller -- a "broken link"
+ * to show, not an error. */
+export interface PageReference {
+  id: string;
+  source_page_id: string;
+  target_page_id: string;
+  target_title: string | null;
+  target_space_id: string | null;
+  created_at: string;
+}
+
+/** The reverse of `PageReference` -- pages that link to this one. */
+export interface PageBacklink {
+  id: string;
+  source_page_id: string;
+  source_title: string | null;
+  source_space_id: string | null;
+  created_at: string;
+}
+
+export const listPageReferences = (token: string, id: string): Promise<PageReference[]> =>
+  apiRequest(`/pages/${id}/references`, token);
+
+export const createPageReference = (token: string, id: string, targetPageId: string): Promise<PageReference> =>
+  apiRequest(`/pages/${id}/references`, token, { method: "POST", body: JSON.stringify({ target_page_id: targetPageId }) });
+
+export const deletePageReference = (token: string, pageId: string, referenceId: string): Promise<void> =>
+  apiRequest(`/pages/${pageId}/references/${referenceId}`, token, { method: "DELETE" });
+
+export const listPageBacklinks = (token: string, id: string): Promise<PageBacklink[]> =>
+  apiRequest(`/pages/${id}/backlinks`, token);
+
 // ── Notes ─────────────────────────────────────────────────────────────────────
 
 export type Visibility = "private" | "team" | "organization";

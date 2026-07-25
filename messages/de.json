@@ -44,7 +44,16 @@
     "deletePageConfirmTitle": "Diese Seite löschen?",
     "deletePageConfirmBody": "Dies kann nicht rückgängig gemacht werden.",
     "deleteCancel": "Behalten",
-    "deleting": "Wird gelöscht…"
+    "deleting": "Wird gelöscht…",
+    "insertReference": "Mit einer Seite verknüpfen",
+    "searchPages": "Seiten durchsuchen…",
+    "noPagesFound": "Keine Seiten gefunden.",
+    "pageLinks": "Verknüpfungen",
+    "references": "Verweise",
+    "backlinks": "Rückverweise",
+    "noReferences": "Diese Seite verweist auf keine anderen Seiten.",
+    "noBacklinks": "Keine Seite verweist auf diese.",
+    "brokenReference": "(Seite nicht mehr verfügbar)"
   },
   "notes": {
     "write": "Schreiben",

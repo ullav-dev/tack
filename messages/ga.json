@@ -44,7 +44,16 @@
     "deletePageConfirmTitle": "An leathanach seo a scriosadh?",
     "deletePageConfirmBody": "Ní féidir é seo a chur ar ceal.",
     "deleteCancel": "Coinnigh é",
-    "deleting": "Á scriosadh…"
+    "deleting": "Á scriosadh…",
+    "insertReference": "Nasc le leathanach",
+    "searchPages": "Cuardaigh leathanaigh…",
+    "noPagesFound": "Níor aimsíodh aon leathanach.",
+    "pageLinks": "Naisc",
+    "references": "Tagairtí",
+    "backlinks": "Ais-naisc",
+    "noReferences": "Ní nascann an leathanach seo le haon leathanach eile.",
+    "noBacklinks": "Níl aon leathanach ag nascadh leis seo.",
+    "brokenReference": "(níl an leathanach ar fáil a thuilleadh)"
   },
   "notes": {
     "write": "Scríobh",
