@@ -23,6 +23,7 @@ import NoteMarkdown, { markdownToHtml } from "@/components/NoteMarkdown";
 import MarkdownComposer from "@/components/MarkdownComposer";
 import VersionHistory from "@/components/VersionHistory";
 import DeleteNoteModal from "@/components/DeleteNoteModal";
+import ConfirmExportOldVersionModal from "@/components/ConfirmExportOldVersionModal";
 import { downloadFile, escapeHtml, slugify, wrapHtmlDocument } from "@/lib/export";
 
 interface Props {
@@ -213,6 +214,7 @@ export default function NoteThread({ noteId }: Props) {
 
   const [historyOpen, setHistoryOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [pendingExport, setPendingExport] = useState<"markdown" | "html" | "pdf" | null>(null);
   const [viewingRevision, setViewingRevision] = useState<NoteRevision | null>(null);
 
   const resolveAuthor = useTeamRoster(note?.team_id ?? null);
@@ -380,11 +382,16 @@ export default function NoteThread({ noteId }: Props) {
   // Export always reflects whatever's currently on screen -- the displayed
   // (possibly historical) body and that version's own replies, not
   // necessarily the live current state, matching what the user is actually
-  // looking at when they click one of these.
+  // looking at when they click one of these. Exporting a non-latest version
+  // requires an explicit confirm first (see `pendingExport`/
+  // `ConfirmExportOldVersionModal`), and the export itself is stamped with
+  // a superseded-version warning so it can't be mistaken for current.
   const exportTitle = note.title || "Untitled note";
 
-  function exportMarkdown() {
-    const lines = [`# ${exportTitle}`, "", displayedBody];
+  function runExportMarkdown() {
+    const lines = [`# ${exportTitle}`];
+    if (viewingRevision) lines.push("", t("supersededStampMarkdown", { n: viewingRevision.version }));
+    lines.push("", displayedBody);
     if (displayedReplies.length) {
       lines.push("", "---", "", "## Replies", "");
       for (const r of displayedReplies) {
@@ -394,8 +401,12 @@ export default function NoteThread({ noteId }: Props) {
     downloadFile(`${slugify(exportTitle)}.md`, lines.join("\n"), "text/markdown");
   }
 
-  function exportHtml() {
-    let bodyHtml = `<h1>${escapeHtml(exportTitle)}</h1>${markdownToHtml(displayedBody)}`;
+  function runExportHtml() {
+    let bodyHtml = `<h1>${escapeHtml(exportTitle)}</h1>`;
+    if (viewingRevision) {
+      bodyHtml += `<p style="border:2px solid #b45309;background:#fffbeb;color:#92400e;font-weight:600;padding:0.5rem 0.75rem;border-radius:0.5rem;">${escapeHtml(t("supersededStampHtml", { n: viewingRevision.version }))}</p>`;
+    }
+    bodyHtml += markdownToHtml(displayedBody);
     if (displayedReplies.length) {
       bodyHtml += `<hr/><h2>Replies</h2>`;
       for (const r of displayedReplies) {
@@ -405,8 +416,30 @@ export default function NoteThread({ noteId }: Props) {
     downloadFile(`${slugify(exportTitle)}.html`, wrapHtmlDocument(exportTitle, bodyHtml), "text/html");
   }
 
-  function exportPdf() {
+  function runExportPdf() {
     window.print();
+  }
+
+  function exportMarkdown() {
+    if (viewingRevision) setPendingExport("markdown");
+    else runExportMarkdown();
+  }
+
+  function exportHtml() {
+    if (viewingRevision) setPendingExport("html");
+    else runExportHtml();
+  }
+
+  function exportPdf() {
+    if (viewingRevision) setPendingExport("pdf");
+    else runExportPdf();
+  }
+
+  function confirmPendingExport() {
+    if (pendingExport === "markdown") runExportMarkdown();
+    else if (pendingExport === "html") runExportHtml();
+    else if (pendingExport === "pdf") runExportPdf();
+    setPendingExport(null);
   }
 
   return (
@@ -497,7 +530,12 @@ export default function NoteThread({ noteId }: Props) {
       </div>
 
       {viewingRevision && (
-        <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        // print:border-2 (not just the screen border-1) + font-semibold so
+        // the stamp stays legible in print even if the browser has
+        // "print background colors" off (bg-amber-50 alone wouldn't survive
+        // that) -- this is what makes the exported PDF unmistakably marked
+        // as a superseded version.
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-300 print:border-2 print:border-amber-700 bg-amber-50 px-3 py-2 text-xs text-amber-800 print:font-semibold">
           <span>{t("viewingOldVersion", { n: viewingRevision.version })}</span>
           <button
             type="button"
@@ -598,6 +636,14 @@ export default function NoteThread({ noteId }: Props) {
 
       {deleteModalOpen && (
         <DeleteNoteModal onConfirm={deleteThisNote} onCancel={() => setDeleteModalOpen(false)} />
+      )}
+
+      {pendingExport && viewingRevision && (
+        <ConfirmExportOldVersionModal
+          version={viewingRevision.version}
+          onConfirm={confirmPendingExport}
+          onCancel={() => setPendingExport(null)}
+        />
       )}
     </div>
   );
