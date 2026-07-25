@@ -8,6 +8,7 @@ import StarterKit from "@tiptap/starter-kit";
 import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCaret from "@tiptap/extension-collaboration-caret";
 import { Table, TableRow, TableHeader, TableCell } from "@tiptap/extension-table";
+import { Markdown } from "tiptap-markdown";
 import { HocuspocusProvider } from "@hocuspocus/provider";
 import * as Y from "yjs";
 import { useAuth } from "@/contexts/AuthContext";
@@ -143,7 +144,7 @@ export default function PageEditor() {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="border-b border-slate-200 px-6 py-3 flex items-center gap-3 shrink-0">
+      <div className="border-b border-slate-200 px-6 py-3 flex items-center gap-3 shrink-0 print:hidden">
         {editable ? (
           <input
             value={titleDraft}
@@ -182,8 +183,12 @@ export default function PageEditor() {
         <span className="shrink-0 text-xs text-slate-400">{synced ? t("allChangesSaved") : t("syncing")}</span>
       </div>
 
+      {/* print:hidden's header above never shows in print output -- this is
+          what actually appears instead (a plain heading, not the input/badges). */}
+      <h1 className="hidden print:block px-6 pt-4 text-xl font-semibold text-slate-800">{page.title}</h1>
+
       {synced ? (
-        <PageEditorContent ydoc={ydocRef.current!} provider={providerRef.current!} editable={editable} user={user} />
+        <PageEditorContent ydoc={ydocRef.current!} provider={providerRef.current!} editable={editable} user={user} title={page.title} />
       ) : (
         <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">{t("syncing")}</div>
       )}
@@ -196,6 +201,7 @@ interface PageEditorContentProps {
   provider: HocuspocusProvider;
   editable: boolean;
   user: AuthUser | null;
+  title: string;
 }
 
 /** Only mounted once the Hocuspocus provider has finished its initial sync
@@ -207,7 +213,7 @@ interface PageEditorContentProps {
  * conditionally configuring `useEditor` in the parent) means `useEditor`
  * is called exactly once per real mount, with no stale-then-recreated
  * editor instance churn. */
-function PageEditorContent({ ydoc, provider, editable, user }: PageEditorContentProps) {
+function PageEditorContent({ ydoc, provider, editable, user, title }: PageEditorContentProps) {
   const editor = useEditor({
     extensions: [
       // Yjs is the undo/redo source of truth for a collaborative document
@@ -220,6 +226,9 @@ function PageEditorContent({ ydoc, provider, editable, user }: PageEditorContent
       TableHeader,
       TableCell,
       DamAssetNode,
+      // Adds `editor.storage.markdown.getMarkdown()` for Markdown export
+      // (F6) -- purely a serializer, doesn't change editing behavior.
+      Markdown,
       ...(user
         ? [
             CollaborationCaret.configure({
@@ -241,9 +250,9 @@ function PageEditorContent({ ydoc, provider, editable, user }: PageEditorContent
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <EditorToolbar editor={editor} />
-      <div className="flex-1 overflow-y-auto px-6 py-4">
-        <EditorContent editor={editor} className="prose prose-slate max-w-3xl focus:outline-none" />
+      <EditorToolbar editor={editor} title={title} />
+      <div className="flex-1 overflow-y-auto px-6 py-4 print:overflow-visible">
+        <EditorContent editor={editor} className="prose prose-slate max-w-3xl print:max-w-none focus:outline-none" />
       </div>
     </div>
   );

@@ -61,7 +61,7 @@ export default function Nav() {
   }
 
   return (
-    <header className="bg-white border-b border-slate-200 shadow-sm shrink-0">
+    <header className="bg-white border-b border-slate-200 shadow-sm shrink-0 print:hidden">
       <div className="max-w-full px-4 sm:px-6">
         <div className="flex items-center justify-between h-14">
           <Link href="/" className="flex items-center gap-2.5">
