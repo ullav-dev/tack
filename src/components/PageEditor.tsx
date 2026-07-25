@@ -16,6 +16,7 @@ import type { AuthUser } from "@/lib/auth-api";
 import { getPage, getPagePermission, updatePage, type Page, type PermissionLevel } from "@/lib/tack-server-api";
 import { displayName } from "@/lib/user-display";
 import EditorToolbar from "@/components/EditorToolbar";
+import DamAssetNode from "@/tiptap/DamAssetNode";
 
 const HOCUSPOCUS_URL = process.env.NEXT_PUBLIC_HOCUSPOCUS_URL ?? "ws://localhost:8088";
 
@@ -218,6 +219,7 @@ function PageEditorContent({ ydoc, provider, editable, user }: PageEditorContent
       TableRow,
       TableHeader,
       TableCell,
+      DamAssetNode,
       ...(user
         ? [
             CollaborationCaret.configure({

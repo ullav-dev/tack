@@ -1,7 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import type { Editor } from "@tiptap/react";
 import { useEditorState } from "@tiptap/react";
+import type { PickedAsset } from "@ullav/dam-picker";
+import { useAuth } from "@/contexts/AuthContext";
+import DamPickerModal from "@/components/DamPickerModal";
 
 interface Props {
   editor: Editor | null;
@@ -121,6 +125,13 @@ const icons = {
       <rect x="2" y="3" width="4" height="10" fill="currentColor" fillOpacity="0.35" stroke="none" />
     </Icon>
   ),
+  image: (
+    <Icon>
+      <rect x="1.75" y="2.75" width="12.5" height="10.5" rx="1.25" />
+      <circle cx="5" cy="6" r="1.1" fill="currentColor" stroke="none" />
+      <path d="m2.5 11 3.5-3.5 2 2 2.5-3 3 4.5" strokeLinecap="round" strokeLinejoin="round" />
+    </Icon>
+  ),
 } as const;
 
 /** Minimal fixed formatting toolbar for the Page editor — Pages are a
@@ -130,6 +141,9 @@ const icons = {
  * typed shortcuts. This does not attempt to be a full toolbar (no
  * link/image/color pickers yet) — just the essentials plus table insertion. */
 export default function EditorToolbar({ editor }: Props) {
+  const { token } = useAuth();
+  const [showDamPicker, setShowDamPicker] = useState(false);
+
   // `useEditorState` (not plain `editor.isActive(...)` calls in render) is
   // what makes button highlighting react to selection/content changes --
   // TipTap's `editor` instance doesn't itself trigger React re-renders.
@@ -154,6 +168,15 @@ export default function EditorToolbar({ editor }: Props) {
   });
 
   if (!editor || !activeState) return null;
+
+  // Inserts the picked asset's thumbnail as a first-class `damAsset` node
+  // (see src/tiptap/DamAssetNode.ts) -- not a markdown-style link, per the
+  // platform's original architecture decision for Pages.
+  function insertAsset(asset: PickedAsset) {
+    const url = asset.url.replace(/\/?$/, "/thumbnail");
+    editor!.chain().focus().insertDamAsset({ src: url, alt: asset.name }).run();
+    setShowDamPicker(false);
+  }
 
   const buttons: ButtonSpec[] = [
     { label: "Bold", title: "Bold", active: activeState.bold, onClick: () => editor.chain().focus().toggleBold().run() },
@@ -259,7 +282,20 @@ export default function EditorToolbar({ editor }: Props) {
         >
           {icons.table}
         </button>
+
+        <button
+          type="button"
+          title="Insert image"
+          onClick={() => setShowDamPicker(true)}
+          className="w-7 h-7 rounded flex items-center justify-center text-slate-600 hover:bg-slate-200/70"
+        >
+          {icons.image}
+        </button>
       </div>
+
+      {showDamPicker && token && (
+        <DamPickerModal token={token} onSelect={insertAsset} onClose={() => setShowDamPicker(false)} />
+      )}
 
       {activeState.inTable && (
         <div className="flex items-center gap-3 px-4 pb-2">
