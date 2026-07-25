@@ -30,8 +30,10 @@ import { displayName } from "@/lib/user-display";
 import EditorToolbar from "@/components/EditorToolbar";
 import DeletePageModal from "@/components/DeletePageModal";
 import PageVersionHistory from "@/components/PageVersionHistory";
+import PageLinksPanel from "@/components/PageLinksPanel";
 import NoteMarkdown from "@/components/NoteMarkdown";
 import DamAssetNode from "@/tiptap/DamAssetNode";
+import PageReferenceNode from "@/tiptap/PageReferenceNode";
 
 const HOCUSPOCUS_URL = process.env.NEXT_PUBLIC_HOCUSPOCUS_URL ?? "ws://localhost:8088";
 
@@ -72,6 +74,16 @@ const saveVersionIcon = (
     <path d="M3 2.5h7.5L13 5v8a.5.5 0 0 1-.5.5h-9A.5.5 0 0 1 3 13V3a.5.5 0 0 1 .5-.5Z" strokeLinejoin="round" />
     <path d="M5.5 2.5v3h4v-3" strokeLinejoin="round" />
     <path d="M5.5 9h5v4.5h-5V9Z" strokeLinejoin="round" />
+  </Icon>
+);
+
+const linksIcon = (
+  <Icon>
+    <path
+      d="M6.5 9.5 9.5 6.5M7 4.5l1-1a2.2 2.2 0 0 1 3 3l-1 1M9 11.5l-1 1a2.2 2.2 0 0 1-3-3l1-1"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
   </Icon>
 );
 
@@ -128,6 +140,7 @@ export default function PageEditor() {
 
   const [revisions, setRevisions] = useState<PageRevision[] | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [linksOpen, setLinksOpen] = useState(false);
   const [creatingVersion, setCreatingVersion] = useState(false);
   const [versionMessage, setVersionMessage] = useState<string | null>(null);
   const [viewingRevision, setViewingRevision] = useState<PageRevision | null>(null);
@@ -281,6 +294,16 @@ export default function PageEditor() {
 
         <button
           type="button"
+          title={t("pageLinks")}
+          aria-label={t("pageLinks")}
+          onClick={() => setLinksOpen(true)}
+          className="shrink-0 w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-rose-700 hover:bg-slate-100 transition-colors"
+        >
+          {linksIcon}
+        </button>
+
+        <button
+          type="button"
           title={tNotes("versionHistory")}
           aria-label={tNotes("versionHistory")}
           onClick={() => setHistoryOpen(true)}
@@ -363,7 +386,15 @@ export default function PageEditor() {
           <NoteMarkdown body={viewingRevision.content_markdown} />
         </div>
       ) : synced ? (
-        <PageEditorContent ydoc={ydocRef.current!} provider={providerRef.current!} editable={editable} user={user} title={page.title} />
+        <PageEditorContent
+          ydoc={ydocRef.current!}
+          provider={providerRef.current!}
+          editable={editable}
+          user={user}
+          title={page.title}
+          pageId={page.id}
+          spaceId={page.space_id}
+        />
       ) : (
         <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">{t("syncing")}</div>
       )}
@@ -382,6 +413,8 @@ export default function PageEditor() {
           onClose={() => setHistoryOpen(false)}
         />
       )}
+
+      {linksOpen && <PageLinksPanel pageId={page.id} canEdit={level === "edit"} onClose={() => setLinksOpen(false)} />}
     </div>
   );
 }
@@ -392,6 +425,8 @@ interface PageEditorContentProps {
   editable: boolean;
   user: AuthUser | null;
   title: string;
+  pageId: string;
+  spaceId: string;
 }
 
 /** Only mounted once the Hocuspocus provider has finished its initial sync
@@ -403,7 +438,7 @@ interface PageEditorContentProps {
  * conditionally configuring `useEditor` in the parent) means `useEditor`
  * is called exactly once per real mount, with no stale-then-recreated
  * editor instance churn. */
-function PageEditorContent({ ydoc, provider, editable, user, title }: PageEditorContentProps) {
+function PageEditorContent({ ydoc, provider, editable, user, title, pageId, spaceId }: PageEditorContentProps) {
   const editor = useEditor({
     extensions: [
       // Yjs is the undo/redo source of truth for a collaborative document
@@ -416,6 +451,7 @@ function PageEditorContent({ ydoc, provider, editable, user, title }: PageEditor
       TableHeader,
       TableCell,
       DamAssetNode,
+      PageReferenceNode,
       // Adds `editor.storage.markdown.getMarkdown()` for Markdown export
       // (F6) -- purely a serializer, doesn't change editing behavior.
       Markdown,
@@ -440,7 +476,7 @@ function PageEditorContent({ ydoc, provider, editable, user, title }: PageEditor
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <EditorToolbar editor={editor} title={title} />
+      <EditorToolbar editor={editor} title={title} pageId={pageId} spaceId={spaceId} />
       <div className="flex-1 overflow-y-auto px-6 py-4 print:overflow-visible">
         <EditorContent editor={editor} className="prose prose-slate max-w-3xl print:max-w-none focus:outline-none" />
       </div>

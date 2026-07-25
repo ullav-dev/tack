@@ -6,6 +6,8 @@ import { useEditorState } from "@tiptap/react";
 import type { PickedAsset } from "@ullav/dam-picker";
 import { useAuth } from "@/contexts/AuthContext";
 import DamPickerModal from "@/components/DamPickerModal";
+import PageReferencePickerModal from "@/components/PageReferencePickerModal";
+import type { Page } from "@/lib/tack-server-api";
 import { downloadFile, escapeHtml, slugify, wrapHtmlDocument } from "@/lib/export";
 
 interface Props {
@@ -13,6 +15,11 @@ interface Props {
   /** Used to build export filenames and the standalone HTML document's
    * <title>. */
   title: string;
+  /** The page currently being edited, and its space -- needed to scope the
+   * reference picker's search and to record the created reference's source
+   * side (F7 8d). */
+  pageId: string;
+  spaceId: string;
 }
 
 interface ButtonSpec {
@@ -153,6 +160,15 @@ const icons = {
       <path d="M4.5 6V3h7v3M4.5 11v2h7v-2" strokeLinecap="round" strokeLinejoin="round" />
     </Icon>
   ),
+  link: (
+    <Icon>
+      <path
+        d="M6.5 9.5 9.5 6.5M7 4.5l1-1a2.2 2.2 0 0 1 3 3l-1 1M9 11.5l-1 1a2.2 2.2 0 0 1-3-3l1-1"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Icon>
+  ),
 } as const;
 
 /** Minimal fixed formatting toolbar for the Page editor — Pages are a
@@ -164,9 +180,10 @@ const icons = {
  * DAM asset embedding, and export (F6: Markdown/HTML download, print/PDF
  * via `window.print()`). The whole toolbar is `print:hidden` -- none of
  * this chrome should appear in the printed/exported-to-PDF output. */
-export default function EditorToolbar({ editor, title }: Props) {
+export default function EditorToolbar({ editor, title, pageId, spaceId }: Props) {
   const { token } = useAuth();
   const [showDamPicker, setShowDamPicker] = useState(false);
+  const [showReferencePicker, setShowReferencePicker] = useState(false);
 
   // `useEditorState` (not plain `editor.isActive(...)` calls in render) is
   // what makes button highlighting react to selection/content changes --
@@ -200,6 +217,15 @@ export default function EditorToolbar({ editor, title }: Props) {
     const url = asset.url.replace(/\/?$/, "/thumbnail");
     editor!.chain().focus().insertDamAsset({ src: url, alt: asset.name }).run();
     setShowDamPicker(false);
+  }
+
+  // Inserts a first-class `pageReference` node (see
+  // src/tiptap/PageReferenceNode.ts) -- the picker itself already recorded
+  // the reference server-side before calling this (see
+  // PageReferencePickerModal.handlePick), so this only updates the doc.
+  function insertReference(page: Page) {
+    editor!.chain().focus().insertPageReference({ pageId: page.id, spaceId: page.space_id, title: page.title }).run();
+    setShowReferencePicker(false);
   }
 
   // Export reads straight off the live editor -- always the current
@@ -337,6 +363,15 @@ export default function EditorToolbar({ editor, title }: Props) {
           {icons.image}
         </button>
 
+        <button
+          type="button"
+          title="Link to a page"
+          onClick={() => setShowReferencePicker(true)}
+          className="w-7 h-7 rounded flex items-center justify-center text-slate-600 hover:bg-slate-200/70"
+        >
+          {icons.link}
+        </button>
+
         <div className="w-px h-5 bg-slate-200 mx-1" />
 
         <button
@@ -367,6 +402,15 @@ export default function EditorToolbar({ editor, title }: Props) {
 
       {showDamPicker && token && (
         <DamPickerModal token={token} onSelect={insertAsset} onClose={() => setShowDamPicker(false)} />
+      )}
+
+      {showReferencePicker && (
+        <PageReferencePickerModal
+          sourcePageId={pageId}
+          spaceId={spaceId}
+          onInsert={insertReference}
+          onClose={() => setShowReferencePicker(false)}
+        />
       )}
 
       {activeState.inTable && (

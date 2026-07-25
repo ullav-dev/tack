@@ -44,7 +44,16 @@
     "deletePageConfirmTitle": "Delete this page?",
     "deletePageConfirmBody": "This can't be undone.",
     "deleteCancel": "Keep it",
-    "deleting": "Deleting…"
+    "deleting": "Deleting…",
+    "insertReference": "Link to a page",
+    "searchPages": "Search pages…",
+    "noPagesFound": "No pages found.",
+    "pageLinks": "Links",
+    "references": "References",
+    "backlinks": "Backlinks",
+    "noReferences": "This page doesn't link to any other pages.",
+    "noBacklinks": "No pages link to this one.",
+    "brokenReference": "(page no longer available)"
   },
   "notes": {
     "write": "Write",
