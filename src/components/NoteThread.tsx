@@ -241,6 +241,19 @@ export default function NoteThread({ noteId }: Props) {
     };
   }, [token, noteId]);
 
+  // Browsers derive the default filename in "Print / save as PDF" from the
+  // document's <title> at the moment window.print() is called -- without
+  // this, every note's PDF would suggest the same generic "Tack" filename.
+  // Reset on unmount so navigating elsewhere doesn't leave a stale title.
+  useEffect(() => {
+    if (!note) return;
+    const previous = document.title;
+    document.title = note.title || previous;
+    return () => {
+      document.title = previous;
+    };
+  }, [note?.title]);
+
   useEffect(() => {
     return subscribeRefresh(async () => {
       if (!token) return;
