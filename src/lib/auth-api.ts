@@ -1,6 +1,6 @@
 // Typed wrappers for ullav-user-management. Requests go via /auth-api/* rewrite in the browser.
 
-import type { TeamSummary } from "./types";
+import type { Team, TeamSummary } from "./types";
 
 const BASE =
   typeof window === "undefined"
@@ -125,6 +125,13 @@ export function isAdmin(token: string | null): boolean {
 
 export const getMyTeams = (token: string): Promise<TeamSummary[]> =>
   authRequest("/teams", {}, token);
+
+/** Full team details (including `members`) — requires the caller to be an
+ * active member of the team (`GET /teams/{id}`, not the admin-only
+ * `/admin/teams/{id}`). Used to resolve a Note's `created_by` (a bare user
+ * id) to a display name via the team's member roster. */
+export const getTeam = (token: string, teamId: string): Promise<Team> =>
+  authRequest(`/teams/${teamId}`, {}, token);
 
 // ── Profile ───────────────────────────────────────────────────────────────────
 

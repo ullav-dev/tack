@@ -30,13 +30,53 @@
     "noResults": "Keine Ergebnisse.",
     "notIndexedYet": "Noch nicht verlinkbar — die Seitenindizierung für die Suche steht noch aus",
     "newPage": "Neue Seite",
-    "newPageTitle": "Seitentitel…"
+    "newPageTitle": "Seitentitel…",
+    "newNote": "Neue Notiz"
   },
   "editor": {
     "loading": "Wird geladen…",
     "viewOnly": "Nur Ansicht",
     "allChangesSaved": "Alle Änderungen gespeichert",
     "syncing": "Wird synchronisiert…"
+  },
+  "notes": {
+    "write": "Schreiben",
+    "preview": "Vorschau",
+    "nothingToPreview": "Noch nichts zur Vorschau.",
+    "versionHistory": "Versionsverlauf",
+    "close": "Schließen",
+    "version": "Version {n}",
+    "loading": "Wird geladen…",
+    "noVersions": "Noch keine Versionen.",
+    "edit": "Bearbeiten",
+    "cancel": "Abbrechen",
+    "saving": "Wird gespeichert…",
+    "save": "Speichern",
+    "replyPlaceholder": "Antwort schreiben…",
+    "reply": "Antworten",
+    "titlePlaceholder": "Titel…",
+    "createVersion": "Als Version speichern",
+    "versionCreated": "Version gespeichert.",
+    "editedBy": "von {name}",
+    "refresh": "Aktualisieren",
+    "delete": "Löschen",
+    "deleteConfirm": "Diese Antwort löschen?",
+    "deleteCancel": "Behalten",
+    "editedSinceSave": "seit dieser Version bearbeitet",
+    "history": "Verlauf",
+    "deleteVersionConfirm": "Diese Version löschen? Ihre Antworten sind dann im Verlauf nicht mehr erreichbar.",
+    "olderReplies": "{count} {count, plural, one {Antwort} other {Antworten}} aus früheren Versionen — siehe Versionsverlauf",
+    "deleteNote": "Notiz löschen",
+    "deleteNoteConfirmTitle": "Diese Notiz löschen?",
+    "deleteNoteConfirmBody": "Dadurch werden die Notiz, alle gespeicherten Versionen und alle Antworten gelöscht. Dies kann nicht rückgängig gemacht werden.",
+    "viewThisVersion": "Diese Version anzeigen",
+    "viewingOldVersion": "Version {n} wird angezeigt — nicht die aktuellste",
+    "showLatest": "Aktuellste anzeigen",
+    "visibility": {
+      "private": "Privat",
+      "team": "Team",
+      "organization": "Organisation"
+    }
   },
   "footer": {
     "tagline": "Notizen & Seiten"

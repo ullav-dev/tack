@@ -90,11 +90,19 @@ export interface Note {
   team_id: string | null;
   parent_id: string | null;
   visibility: Visibility;
+  /** Empty for replies -- only top-level notes collect a title. */
+  title: string;
   body_markdown: string;
   created_by: string;
   created_at: string;
   updated_at: string;
   reply_count: number;
+  /** For a reply, the parent note's latest saved version number at the
+   * moment this reply was created -- `null` for top-level notes and for
+   * replies made before this field existed. Used to show a reply only
+   * while browsing that version (or the current state, if it's still the
+   * latest one). */
+  in_reply_to_version: number | null;
 }
 
 export interface NotesPage {
@@ -126,14 +134,20 @@ export const getNote = (token: string, id: string): Promise<Note> => apiRequest(
 
 export const createNote = (
   token: string,
-  payload: { team_id: string; visibility: Visibility; body_markdown: string }
+  payload: { team_id: string; visibility: Visibility; title: string; body_markdown: string }
 ): Promise<Note> => apiRequest("/notes", token, { method: "POST", body: JSON.stringify(payload) });
 
 export const updateNote = (
   token: string,
   id: string,
-  payload: { body_markdown?: string; visibility?: Visibility }
+  payload: { title?: string; body_markdown?: string; visibility?: Visibility }
 ): Promise<Note> => apiRequest(`/notes/${id}`, token, { method: "PATCH", body: JSON.stringify(payload) });
+
+/** Soft-deletes a note or reply -- same endpoint, same creator-or-admin ACL
+ * rule either way, since a reply is just a `notes` row with `parent_id`
+ * set. */
+export const deleteNote = (token: string, id: string): Promise<void> =>
+  apiRequest(`/notes/${id}`, token, { method: "DELETE" });
 
 export const listReplies = (token: string, id: string): Promise<Note[]> => apiRequest(`/notes/${id}/replies`, token);
 
@@ -142,6 +156,16 @@ export const createReply = (token: string, id: string, body_markdown: string): P
 
 export const listRevisions = (token: string, id: string): Promise<NoteRevision[]> =>
   apiRequest(`/notes/${id}/revisions`, token);
+
+/** Snapshots the note's current body as a new named version — a deliberate
+ * action (button click), not an automatic side effect of every save. */
+export const createRevision = (token: string, id: string): Promise<NoteRevision> =>
+  apiRequest(`/notes/${id}/revisions`, token, { method: "POST" });
+
+/** Deletes one saved version. The server refuses to delete the last
+ * remaining one. */
+export const deleteRevision = (token: string, noteId: string, revisionId: string): Promise<void> =>
+  apiRequest(`/notes/${noteId}/revisions/${revisionId}`, token, { method: "DELETE" });
 
 // ── Search ────────────────────────────────────────────────────────────────────
 

@@ -30,13 +30,53 @@
     "noResults": "Níl aon toradh ann.",
     "notIndexedYet": "Níl sé inlasctha fós — tá innéacsú cuardaigh na leathanach fós ar feitheamh",
     "newPage": "Leathanach nua",
-    "newPageTitle": "Teideal an leathanaigh…"
+    "newPageTitle": "Teideal an leathanaigh…",
+    "newNote": "Nóta nua"
   },
   "editor": {
     "loading": "Á lódáil…",
     "viewOnly": "Amharc amháin",
     "allChangesSaved": "Gach athrú sábháilte",
     "syncing": "Ag sioncronú…"
+  },
+  "notes": {
+    "write": "Scríobh",
+    "preview": "Réamhamharc",
+    "nothingToPreview": "Níl aon rud le réamhamharc fós.",
+    "versionHistory": "Stair leaganacha",
+    "close": "Dún",
+    "version": "Leagan {n}",
+    "loading": "Á lódáil…",
+    "noVersions": "Níl aon leaganacha ann fós.",
+    "edit": "Cuir in eagar",
+    "cancel": "Cealaigh",
+    "saving": "Á shábháil…",
+    "save": "Sábháil",
+    "replyPlaceholder": "Scríobh freagra…",
+    "reply": "Freagair",
+    "titlePlaceholder": "Teideal…",
+    "createVersion": "Sábháil mar leagan",
+    "versionCreated": "Leagan sábháilte.",
+    "editedBy": "ag {name}",
+    "refresh": "Athnuachan",
+    "delete": "Scrios",
+    "deleteConfirm": "An bhfreagra seo a scriosadh?",
+    "deleteCancel": "Coinnigh é",
+    "editedSinceSave": "curtha in eagar ón leagan seo",
+    "history": "Stair",
+    "deleteVersionConfirm": "An leagan seo a scriosadh? Ní bheidh a fhreagraí inrochtana ón stair a thuilleadh.",
+    "olderReplies": "{count} {count, plural, one {fhreagra} other {freagra}} ó leaganacha níos sine — féach ar stair na leaganacha",
+    "deleteNote": "Scrios an nóta",
+    "deleteNoteConfirmTitle": "An nóta seo a scriosadh?",
+    "deleteNoteConfirmBody": "Scriosfaidh sé seo an nóta, gach leagan sábháilte, agus gach freagra. Ní féidir é seo a chur ar ceal.",
+    "viewThisVersion": "Féach ar an leagan seo",
+    "viewingOldVersion": "Ag féachaint ar leagan {n} — ní hé an ceann is déanaí é",
+    "showLatest": "Taispeáin an ceann is déanaí",
+    "visibility": {
+      "private": "Príobháideach",
+      "team": "Foireann",
+      "organization": "Eagraíocht"
+    }
   },
   "footer": {
     "tagline": "Nótaí & Leathanaigh"
