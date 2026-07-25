@@ -15,10 +15,22 @@ import * as Y from "yjs";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePageEvents } from "@/contexts/PageEventsContext";
 import type { AuthUser } from "@/lib/auth-api";
-import { deletePage, getPage, getPagePermission, updatePage, type Page, type PermissionLevel } from "@/lib/tack-server-api";
+import {
+  createPageRevision,
+  deletePage,
+  getPage,
+  getPagePermission,
+  listPageRevisions,
+  updatePage,
+  type Page,
+  type PageRevision,
+  type PermissionLevel,
+} from "@/lib/tack-server-api";
 import { displayName } from "@/lib/user-display";
 import EditorToolbar from "@/components/EditorToolbar";
 import DeletePageModal from "@/components/DeletePageModal";
+import PageVersionHistory from "@/components/PageVersionHistory";
+import NoteMarkdown from "@/components/NoteMarkdown";
 import DamAssetNode from "@/tiptap/DamAssetNode";
 
 const HOCUSPOCUS_URL = process.env.NEXT_PUBLIC_HOCUSPOCUS_URL ?? "ws://localhost:8088";
@@ -38,6 +50,30 @@ interface PresenceEntry {
   name: string;
   color: string;
 }
+
+function Icon({ children }: { children: React.ReactNode }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" className="w-4 h-4">
+      {children}
+    </svg>
+  );
+}
+
+const historyIcon = (
+  <Icon>
+    <circle cx="8" cy="8.5" r="5.5" />
+    <path d="M8 5.5v3l2.2 1.3" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M5.3 2.3 3.3 3.7M10.7 2.3l2 1.4" strokeLinecap="round" />
+  </Icon>
+);
+
+const saveVersionIcon = (
+  <Icon>
+    <path d="M3 2.5h7.5L13 5v8a.5.5 0 0 1-.5.5h-9A.5.5 0 0 1 3 13V3a.5.5 0 0 1 .5-.5Z" strokeLinejoin="round" />
+    <path d="M5.5 2.5v3h4v-3" strokeLinejoin="round" />
+    <path d="M5.5 9h5v4.5h-5V9Z" strokeLinejoin="round" />
+  </Icon>
+);
 
 /** Real-time collaborative Page editor: TipTap bound to a Yjs document
  * synced through tack-hocuspocus. There is deliberately no Save button —
@@ -59,13 +95,26 @@ interface PresenceEntry {
  * children first, rather than the frontend ever creating pages that are
  * still there but unreachable from the tree. Navigates to the space's own
  * landing route afterward and broadcasts the deletion via
- * `notifyPageDeleted` so the Navigator's PageTree drops it immediately. */
+ * `notifyPageDeleted` so the Navigator's PageTree drops it immediately.
+ *
+ * Version history (F7 8c): same explicit-only "Save as version" model as
+ * Notes -- a version is a deliberate snapshot of `content_markdown`, never
+ * an automatic side effect of a collaborative edit. "View this version" in
+ * `PageVersionHistory` sets `viewingRevision`, which swaps the whole main
+ * panel to a read-only Markdown render of that snapshot (via `NoteMarkdown`
+ * -- there is no live-editor equivalent of "load this version into the
+ * Yjs doc", only a plain rendered view) instead of the live collaborative
+ * editor, with the same amber banner/"Show latest" pattern Notes uses.
+ * `editable` folds in `!viewingRevision`, so every edit affordance (title,
+ * delete, the live editor itself) is disabled while browsing history --
+ * consistent with Notes' `NoteThread`. */
 export default function PageEditor() {
   const { spaceId, pageId } = useParams<{ spaceId: string; pageId: string }>();
   const { token, user } = useAuth();
   const { notifyPageUpdated, notifyPageDeleted } = usePageEvents();
   const router = useRouter();
   const t = useTranslations("editor");
+  const tNotes = useTranslations("notes");
 
   const [page, setPage] = useState<Page | null>(null);
   const [level, setLevel] = useState<PermissionLevel | null>(null);
@@ -77,6 +126,12 @@ export default function PageEditor() {
   const [titleSaving, setTitleSaving] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
+  const [revisions, setRevisions] = useState<PageRevision[] | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [creatingVersion, setCreatingVersion] = useState(false);
+  const [versionMessage, setVersionMessage] = useState<string | null>(null);
+  const [viewingRevision, setViewingRevision] = useState<PageRevision | null>(null);
+
   const ydocRef = useRef<Y.Doc | null>(null);
   if (!ydocRef.current) ydocRef.current = new Y.Doc();
   const providerRef = useRef<HocuspocusProvider | null>(null);
@@ -84,12 +139,14 @@ export default function PageEditor() {
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
-    Promise.all([getPage(token, pageId), getPagePermission(token, pageId)])
-      .then(([p, perm]) => {
+    setViewingRevision(null);
+    Promise.all([getPage(token, pageId), getPagePermission(token, pageId), listPageRevisions(token, pageId)])
+      .then(([p, perm, rv]) => {
         if (cancelled) return;
         setPage(p);
         setTitleDraft(p.title);
         setLevel(perm.level);
+        setRevisions(rv);
       })
       .catch((e) => {
         if (!cancelled) setLoadError(e.message);
@@ -169,10 +226,30 @@ export default function PageEditor() {
     router.push(`/spaces/${spaceId}/pages`);
   }
 
+  async function saveAsVersion() {
+    if (!token || !page) return;
+    setCreatingVersion(true);
+    setVersionMessage(null);
+    try {
+      const revision = await createPageRevision(token, page.id);
+      setRevisions((prev) => [revision, ...(prev ?? [])]);
+      setVersionMessage(tNotes("versionCreated"));
+    } catch (e) {
+      setLoadError((e as Error).message);
+    } finally {
+      setCreatingVersion(false);
+    }
+  }
+
+  function handleSelectVersion(revision: PageRevision) {
+    setViewingRevision(revision.version === revisions?.[0]?.version ? null : revision);
+  }
+
   if (loadError) return <p className="p-6 text-red-600">{loadError}</p>;
   if (!page || level === null) return <p className="p-6 text-slate-400">{t("loading")}</p>;
 
-  const editable = level === "edit";
+  const editable = level === "edit" && !viewingRevision;
+  const latestRevision = revisions?.[0] ?? null;
 
   return (
     <div className="h-full flex flex-col">
@@ -192,10 +269,37 @@ export default function PageEditor() {
           <h1 className="text-xl font-semibold text-slate-800 flex-1 min-w-0 truncate">{page.title}</h1>
         )}
 
-        {level === "view" && (
+        {level === "view" && !viewingRevision && (
           <span className="shrink-0 text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
             {t("viewOnly")}
           </span>
+        )}
+
+        {latestRevision && !viewingRevision && (
+          <span className="shrink-0 text-xs text-slate-400">{tNotes("version", { n: latestRevision.version })}</span>
+        )}
+
+        <button
+          type="button"
+          title={tNotes("versionHistory")}
+          aria-label={tNotes("versionHistory")}
+          onClick={() => setHistoryOpen(true)}
+          className="shrink-0 w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-rose-700 hover:bg-slate-100 transition-colors"
+        >
+          {historyIcon}
+        </button>
+
+        {level === "edit" && !viewingRevision && (
+          <button
+            type="button"
+            title={tNotes("createVersion")}
+            aria-label={tNotes("createVersion")}
+            onClick={saveAsVersion}
+            disabled={creatingVersion}
+            className="shrink-0 w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-rose-700 hover:bg-slate-100 disabled:opacity-40 transition-colors"
+          >
+            {saveVersionIcon}
+          </button>
         )}
 
         {editable && (
@@ -214,7 +318,7 @@ export default function PageEditor() {
           </button>
         )}
 
-        {presence.length > 0 && (
+        {presence.length > 0 && !viewingRevision && (
           <div className="flex -space-x-1.5 shrink-0" title={presence.map((p) => p.name).join(", ")}>
             {presence.slice(0, 5).map((p, i) => (
               <span
@@ -228,14 +332,37 @@ export default function PageEditor() {
           </div>
         )}
 
-        <span className="shrink-0 text-xs text-slate-400">{synced ? t("allChangesSaved") : t("syncing")}</span>
+        {!viewingRevision && (
+          <span className="shrink-0 text-xs text-slate-400">{synced ? t("allChangesSaved") : t("syncing")}</span>
+        )}
       </div>
 
       {/* print:hidden's header above never shows in print output -- this is
           what actually appears instead (a plain heading, not the input/badges). */}
       <h1 className="hidden print:block px-6 pt-4 text-xl font-semibold text-slate-800">{page.title}</h1>
 
-      {synced ? (
+      {viewingRevision && (
+        <div className="mx-6 mt-3 flex items-center justify-between gap-2 rounded-lg border border-amber-300 print:border-2 print:border-amber-700 bg-amber-50 px-3 py-2 text-xs text-amber-800 print:font-semibold shrink-0">
+          <span>{tNotes("viewingOldVersion", { n: viewingRevision.version })}</span>
+          <button
+            type="button"
+            onClick={() => setViewingRevision(null)}
+            className="font-medium underline hover:no-underline shrink-0 print:hidden"
+          >
+            {tNotes("showLatest")}
+          </button>
+        </div>
+      )}
+
+      {versionMessage && !viewingRevision && (
+        <p className="mx-6 mt-2 text-xs text-green-700 print:hidden shrink-0">{versionMessage}</p>
+      )}
+
+      {viewingRevision ? (
+        <div className="flex-1 overflow-y-auto px-6 py-4 print:overflow-visible">
+          <NoteMarkdown body={viewingRevision.content_markdown} />
+        </div>
+      ) : synced ? (
         <PageEditorContent ydoc={ydocRef.current!} provider={providerRef.current!} editable={editable} user={user} title={page.title} />
       ) : (
         <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">{t("syncing")}</div>
@@ -243,6 +370,17 @@ export default function PageEditor() {
 
       {deleteModalOpen && (
         <DeletePageModal onConfirm={deleteThisPage} onCancel={() => setDeleteModalOpen(false)} />
+      )}
+
+      {historyOpen && (
+        <PageVersionHistory
+          pageId={page.id}
+          title={page.title}
+          canEdit={level === "edit"}
+          onRevisionsChanged={setRevisions}
+          onSelectVersion={handleSelectVersion}
+          onClose={() => setHistoryOpen(false)}
+        />
       )}
     </div>
   );

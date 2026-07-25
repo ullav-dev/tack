@@ -87,6 +87,29 @@ export const getPagePermission = (token: string, id: string): Promise<{ level: P
 export const deletePage = (token: string, id: string): Promise<void> =>
   apiRequest(`/pages/${id}`, token, { method: "DELETE" });
 
+/** A named, user-triggered snapshot of a page's `content_markdown` --
+ * same explicit-only trigger model as `NoteRevision` (a version is only
+ * ever created via `createPageRevision`, never implicitly). Unlike Notes,
+ * a page has no automatic baseline revision at creation time, so this list
+ * can legitimately be empty. */
+export interface PageRevision {
+  id: string;
+  page_id: string;
+  version: number;
+  content_markdown: string;
+  edited_by: string;
+  edited_at: string;
+}
+
+export const listPageRevisions = (token: string, id: string): Promise<PageRevision[]> =>
+  apiRequest(`/pages/${id}/revisions`, token);
+
+export const createPageRevision = (token: string, id: string): Promise<PageRevision> =>
+  apiRequest(`/pages/${id}/revisions`, token, { method: "POST" });
+
+export const deletePageRevision = (token: string, pageId: string, revisionId: string): Promise<void> =>
+  apiRequest(`/pages/${pageId}/revisions/${revisionId}`, token, { method: "DELETE" });
+
 // ── Notes ─────────────────────────────────────────────────────────────────────
 
 export type Visibility = "private" | "team" | "organization";
