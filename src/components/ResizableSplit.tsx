@@ -19,7 +19,12 @@ interface Props {
  * committed to localStorage on drag end to avoid thrashing storage on every
  * mousemove. Adapted from lagan's ResizableSplit (same component shape,
  * same behavior) — this is Tack's own copy, not a shared package, matching
- * the "graduate to packages/ once proven on a real screen" plan for this repo. */
+ * the "graduate to packages/ once proven on a real screen" plan for this repo.
+ *
+ * `left` and the drag handle are `print:hidden` -- this is the workspace
+ * shell's own split (Navigator | note/page content), and printing a note or
+ * page should only ever produce the content itself, not the browsing chrome
+ * around it. Export (F6) relies on this rather than a separate print route. */
 export default function ResizableSplit({
   left,
   right,
@@ -72,7 +77,7 @@ export default function ResizableSplit({
 
   return (
     <div ref={containerRef} className="flex items-stretch h-full min-h-0">
-      <div style={{ width }} className="shrink-0 overflow-y-auto">
+      <div style={{ width }} className="shrink-0 overflow-y-auto print:hidden">
         {left}
       </div>
       <div
@@ -82,7 +87,7 @@ export default function ResizableSplit({
           e.preventDefault();
           setDragging(true);
         }}
-        className={`w-2.5 shrink-0 cursor-col-resize flex items-center justify-center group self-stretch ${
+        className={`w-2.5 shrink-0 cursor-col-resize flex items-center justify-center group self-stretch print:hidden ${
           dragging ? "bg-rose-100" : ""
         }`}
       >
@@ -92,7 +97,7 @@ export default function ResizableSplit({
           }`}
         />
       </div>
-      <div className="flex-1 min-w-0 overflow-y-auto">{right}</div>
+      <div className="flex-1 min-w-0 overflow-y-auto print:overflow-visible print:w-full">{right}</div>
     </div>
   );
 }

@@ -1,11 +1,19 @@
 "use client";
 
-import ReactMarkdown from "react-markdown";
+import { renderToStaticMarkup } from "react-dom/server";
+import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 interface Props {
   body: string;
 }
+
+const imgRenderer: Components = {
+  img: ({ src, alt }) => {
+    if (!src || typeof src !== "string") return null;
+    return <img src={src} alt={alt ?? ""} className="max-w-full rounded" />;
+  },
+};
 
 /** Renders a Note's markdown body — `react-markdown` + `remark-gfm`, the
  * same stack already used by togra/lagan/clann-webapp for markdown
@@ -19,17 +27,22 @@ interface Props {
 export default function NoteMarkdown({ body }: Props) {
   return (
     <div className="prose prose-slate prose-sm max-w-none">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          img: ({ src, alt }) => {
-            if (!src || typeof src !== "string") return null;
-            return <img src={src} alt={alt ?? ""} className="max-w-full rounded" />;
-          },
-        }}
-      >
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={imgRenderer}>
         {body}
       </ReactMarkdown>
     </div>
+  );
+}
+
+/** Same markdown->HTML rendering as the component above, as a plain string
+ * -- used by HTML export (F6) to turn a note/reply body into an HTML
+ * fragment without mounting anything. `renderToStaticMarkup` is safe to
+ * call client-side (it's a pure synchronous serializer, not an SSR-only
+ * API). */
+export function markdownToHtml(body: string): string {
+  return renderToStaticMarkup(
+    <ReactMarkdown remarkPlugins={[remarkGfm]} components={imgRenderer}>
+      {body}
+    </ReactMarkdown>
   );
 }

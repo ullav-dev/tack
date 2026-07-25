@@ -100,3 +100,13 @@ body,
   background-color: var(--color-rose-400);
   pointer-events: none;
 }
+
+/* Export-to-PDF (F6) prints whatever's on screen via window.print() -- the
+   workspace chrome (Nav, Footer, Navigator, toolbars, modals) is hidden via
+   Tailwind's print: variant at each component; this just sets a reasonable
+   page margin so content isn't printed edge-to-edge. */
+@media print {
+  @page {
+    margin: 2cm;
+  }
+}

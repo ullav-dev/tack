@@ -136,7 +136,7 @@ export default function VersionHistory({
     : [];
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-black/20" onClick={onClose}>
+    <div className="fixed inset-0 z-40 flex justify-end bg-black/20 print:hidden" onClick={onClose}>
       <div
         className="w-full max-w-[90vw] h-full bg-white shadow-xl flex flex-col"
         onClick={(e) => e.stopPropagation()}

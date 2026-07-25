@@ -109,7 +109,7 @@ export default function DamPickerModal({ token, onSelect, onClose }: Props) {
     <div
       ref={modalRef}
       tabIndex={-1}
-      className="fixed z-[9999] flex flex-col rounded-xl border border-rose-900/30 shadow-2xl bg-white overflow-hidden outline-none"
+      className="fixed z-[9999] flex flex-col rounded-xl border border-rose-900/30 shadow-2xl bg-white overflow-hidden outline-none print:hidden"
       style={{ left: pos.x, top: pos.y, width: size.w, height: size.h }}
       onKeyDown={onKeyDown}
       onPointerDown={(e) => e.stopPropagation()}

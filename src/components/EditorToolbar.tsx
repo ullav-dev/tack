@@ -6,9 +6,13 @@ import { useEditorState } from "@tiptap/react";
 import type { PickedAsset } from "@ullav/dam-picker";
 import { useAuth } from "@/contexts/AuthContext";
 import DamPickerModal from "@/components/DamPickerModal";
+import { downloadFile, escapeHtml, slugify, wrapHtmlDocument } from "@/lib/export";
 
 interface Props {
   editor: Editor | null;
+  /** Used to build export filenames and the standalone HTML document's
+   * <title>. */
+  title: string;
 }
 
 interface ButtonSpec {
@@ -132,6 +136,23 @@ const icons = {
       <path d="m2.5 11 3.5-3.5 2 2 2.5-3 3 4.5" strokeLinecap="round" strokeLinejoin="round" />
     </Icon>
   ),
+  downloadMarkdown: (
+    <Icon>
+      <path d="M8 2v7M5 6l3 3 3-3" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M3 12.5h10" strokeLinecap="round" />
+    </Icon>
+  ),
+  downloadHtml: (
+    <Icon>
+      <path d="M5 4 2 8l3 4M11 4l3 4-3 4" strokeLinecap="round" strokeLinejoin="round" />
+    </Icon>
+  ),
+  print: (
+    <Icon>
+      <rect x="3" y="6" width="10" height="5" rx="0.8" />
+      <path d="M4.5 6V3h7v3M4.5 11v2h7v-2" strokeLinecap="round" strokeLinejoin="round" />
+    </Icon>
+  ),
 } as const;
 
 /** Minimal fixed formatting toolbar for the Page editor — Pages are a
@@ -139,8 +160,11 @@ const icons = {
  * the trigger text, the same way Confluence/Notion behave), so without
  * some visible affordance, formatting is only discoverable via those
  * typed shortcuts. This does not attempt to be a full toolbar (no
- * link/image/color pickers yet) — just the essentials plus table insertion. */
-export default function EditorToolbar({ editor }: Props) {
+ * link/color pickers yet) — just the essentials plus table insertion,
+ * DAM asset embedding, and export (F6: Markdown/HTML download, print/PDF
+ * via `window.print()`). The whole toolbar is `print:hidden` -- none of
+ * this chrome should appear in the printed/exported-to-PDF output. */
+export default function EditorToolbar({ editor, title }: Props) {
   const { token } = useAuth();
   const [showDamPicker, setShowDamPicker] = useState(false);
 
@@ -176,6 +200,27 @@ export default function EditorToolbar({ editor }: Props) {
     const url = asset.url.replace(/\/?$/, "/thumbnail");
     editor!.chain().focus().insertDamAsset({ src: url, alt: asset.name }).run();
     setShowDamPicker(false);
+  }
+
+  // Export reads straight off the live editor -- always the current
+  // (possibly still-syncing-in-others'-edits) state, not a separate
+  // re-fetch, and specifically not the REST `content_markdown` field, which
+  // is documented to go stale after a page is edited collaboratively (see
+  // tack-server's known gap). `editor.storage.markdown` comes from the
+  // `Markdown` extension registered in PageEditor.tsx -- a pure serializer,
+  // doesn't change editing behavior.
+  function exportMarkdown() {
+    const markdown = editor!.storage.markdown.getMarkdown() as string;
+    downloadFile(`${slugify(title)}.md`, `# ${title}\n\n${markdown}`, "text/markdown");
+  }
+
+  function exportHtml() {
+    const bodyHtml = `<h1>${escapeHtml(title)}</h1>${editor!.getHTML()}`;
+    downloadFile(`${slugify(title)}.html`, wrapHtmlDocument(title, bodyHtml), "text/html");
+  }
+
+  function exportPdf() {
+    window.print();
   }
 
   const buttons: ButtonSpec[] = [
@@ -242,7 +287,7 @@ export default function EditorToolbar({ editor }: Props) {
   };
 
   return (
-    <div className="border-b border-slate-200 shrink-0 bg-slate-50/60">
+    <div className="border-b border-slate-200 shrink-0 bg-slate-50/60 print:hidden">
       <div className="flex items-center gap-1 px-4 py-1.5">
         {buttons.map((b) =>
           b.label === "H1" || b.label === "H2" || b.label === "H3" ? (
@@ -290,6 +335,33 @@ export default function EditorToolbar({ editor }: Props) {
           className="w-7 h-7 rounded flex items-center justify-center text-slate-600 hover:bg-slate-200/70"
         >
           {icons.image}
+        </button>
+
+        <div className="w-px h-5 bg-slate-200 mx-1" />
+
+        <button
+          type="button"
+          title="Download as Markdown"
+          onClick={exportMarkdown}
+          className="w-7 h-7 rounded flex items-center justify-center text-slate-600 hover:bg-slate-200/70"
+        >
+          {icons.downloadMarkdown}
+        </button>
+        <button
+          type="button"
+          title="Download as HTML"
+          onClick={exportHtml}
+          className="w-7 h-7 rounded flex items-center justify-center text-slate-600 hover:bg-slate-200/70"
+        >
+          {icons.downloadHtml}
+        </button>
+        <button
+          type="button"
+          title="Print / save as PDF"
+          onClick={exportPdf}
+          className="w-7 h-7 rounded flex items-center justify-center text-slate-600 hover:bg-slate-200/70"
+        >
+          {icons.print}
         </button>
       </div>
 

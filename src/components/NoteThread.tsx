@@ -19,10 +19,12 @@ import {
   type NoteRevision,
   type Visibility,
 } from "@/lib/tack-server-api";
-import NoteMarkdown from "@/components/NoteMarkdown";
+import NoteMarkdown, { markdownToHtml } from "@/components/NoteMarkdown";
 import MarkdownComposer from "@/components/MarkdownComposer";
 import VersionHistory from "@/components/VersionHistory";
 import DeleteNoteModal from "@/components/DeleteNoteModal";
+import ConfirmExportOldVersionModal from "@/components/ConfirmExportOldVersionModal";
+import { downloadFile, escapeHtml, slugify, wrapHtmlDocument } from "@/lib/export";
 
 interface Props {
   noteId: string;
@@ -58,7 +60,7 @@ function IconButton({
       aria-label={title}
       onClick={onClick}
       disabled={disabled}
-      className={`w-6 h-6 rounded flex items-center justify-center transition-colors disabled:opacity-40 ${
+      className={`w-6 h-6 rounded flex items-center justify-center transition-colors disabled:opacity-40 print:hidden ${
         danger ? "text-slate-400 hover:text-red-600 hover:bg-red-50" : "text-slate-400 hover:text-rose-700 hover:bg-slate-100"
       }`}
     >
@@ -93,6 +95,26 @@ const deleteIcon = (
   <Icon>
     <path d="M3 4.5h10M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5" strokeLinecap="round" strokeLinejoin="round" />
     <path d="M4.5 4.5 5 13a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1l.5-8.5" strokeLinecap="round" strokeLinejoin="round" />
+  </Icon>
+);
+
+const downloadMarkdownIcon = (
+  <Icon>
+    <path d="M8 2v7M5 6l3 3 3-3" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M3 12.5h10" strokeLinecap="round" />
+  </Icon>
+);
+
+const downloadHtmlIcon = (
+  <Icon>
+    <path d="M5 4 2 8l3 4M11 4l3 4-3 4" strokeLinecap="round" strokeLinejoin="round" />
+  </Icon>
+);
+
+const printIcon = (
+  <Icon>
+    <rect x="3" y="6" width="10" height="5" rx="0.8" />
+    <path d="M4.5 6V3h7v3M4.5 11v2h7v-2" strokeLinecap="round" strokeLinejoin="round" />
   </Icon>
 );
 
@@ -154,7 +176,16 @@ const deleteIcon = (
  * current state. All edit affordances (title, visibility, body edit,
  * "Save as version", delete-note, replying) are gated on `!viewingRevision`
  * too -- editing a historical snapshot in place doesn't make sense; the
- * user has to return to latest first. */
+ * user has to return to latest first.
+ *
+ * Export (F6): Markdown/HTML download build directly off whatever's
+ * currently displayed (`displayedBody`/`displayedReplies`), so exporting
+ * while browsing an old version exports that version, not the live one.
+ * PDF export is just `window.print()` -- the workspace shell (Nav, Footer,
+ * Navigator) and every edit-only control here are `print:hidden`, so the
+ * printed/saved-as-PDF output is just the title, metadata, body, and
+ * current replies -- no new rendering service, per the confirmed plan
+ * decision. */
 export default function NoteThread({ noteId }: Props) {
   const { token, user } = useAuth();
   const { notifyNoteUpdated, notifyNoteDeleted, subscribeRefresh } = useNoteEvents();
@@ -183,6 +214,7 @@ export default function NoteThread({ noteId }: Props) {
 
   const [historyOpen, setHistoryOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [pendingExport, setPendingExport] = useState<"markdown" | "html" | "pdf" | null>(null);
   const [viewingRevision, setViewingRevision] = useState<NoteRevision | null>(null);
 
   const resolveAuthor = useTeamRoster(note?.team_id ?? null);
@@ -208,6 +240,19 @@ export default function NoteThread({ noteId }: Props) {
       cancelled = true;
     };
   }, [token, noteId]);
+
+  // Browsers derive the default filename in "Print / save as PDF" from the
+  // document's <title> at the moment window.print() is called -- without
+  // this, every note's PDF would suggest the same generic "Tack" filename.
+  // Reset on unmount so navigating elsewhere doesn't leave a stale title.
+  useEffect(() => {
+    if (!note) return;
+    const previous = document.title;
+    document.title = note.title || previous;
+    return () => {
+      document.title = previous;
+    };
+  }, [note?.title]);
 
   useEffect(() => {
     return subscribeRefresh(async () => {
@@ -347,21 +392,89 @@ export default function NoteThread({ noteId }: Props) {
     ? []
     : replies.filter((r) => r.in_reply_to_version !== null && r.in_reply_to_version !== displayedVersion);
 
+  // Export always reflects whatever's currently on screen -- the displayed
+  // (possibly historical) body and that version's own replies, not
+  // necessarily the live current state, matching what the user is actually
+  // looking at when they click one of these. Exporting a non-latest version
+  // requires an explicit confirm first (see `pendingExport`/
+  // `ConfirmExportOldVersionModal`), and the export itself is stamped with
+  // a superseded-version warning so it can't be mistaken for current.
+  const exportTitle = note.title || "Untitled note";
+
+  function runExportMarkdown() {
+    const lines = [`# ${exportTitle}`];
+    if (viewingRevision) lines.push("", t("supersededStampMarkdown", { n: viewingRevision.version }));
+    lines.push("", displayedBody);
+    if (displayedReplies.length) {
+      lines.push("", "---", "", "## Replies", "");
+      for (const r of displayedReplies) {
+        lines.push(`### ${resolveAuthor(r.created_by)} — ${new Date(r.created_at).toLocaleString()}`, "", r.body_markdown, "");
+      }
+    }
+    downloadFile(`${slugify(exportTitle)}.md`, lines.join("\n"), "text/markdown");
+  }
+
+  function runExportHtml() {
+    let bodyHtml = `<h1>${escapeHtml(exportTitle)}</h1>`;
+    if (viewingRevision) {
+      bodyHtml += `<p style="border:2px solid #b45309;background:#fffbeb;color:#92400e;font-weight:600;padding:0.5rem 0.75rem;border-radius:0.5rem;">${escapeHtml(t("supersededStampHtml", { n: viewingRevision.version }))}</p>`;
+    }
+    bodyHtml += markdownToHtml(displayedBody);
+    if (displayedReplies.length) {
+      bodyHtml += `<hr/><h2>Replies</h2>`;
+      for (const r of displayedReplies) {
+        bodyHtml += `<p class="meta">${escapeHtml(resolveAuthor(r.created_by))} — ${new Date(r.created_at).toLocaleString()}</p>${markdownToHtml(r.body_markdown)}`;
+      }
+    }
+    downloadFile(`${slugify(exportTitle)}.html`, wrapHtmlDocument(exportTitle, bodyHtml), "text/html");
+  }
+
+  function runExportPdf() {
+    window.print();
+  }
+
+  function exportMarkdown() {
+    if (viewingRevision) setPendingExport("markdown");
+    else runExportMarkdown();
+  }
+
+  function exportHtml() {
+    if (viewingRevision) setPendingExport("html");
+    else runExportHtml();
+  }
+
+  function exportPdf() {
+    if (viewingRevision) setPendingExport("pdf");
+    else runExportPdf();
+  }
+
+  function confirmPendingExport() {
+    if (pendingExport === "markdown") runExportMarkdown();
+    else if (pendingExport === "html") runExportHtml();
+    else if (pendingExport === "pdf") runExportPdf();
+    setPendingExport(null);
+  }
+
   return (
     <div className="p-6 max-w-3xl space-y-6">
       <div className="flex items-center gap-3">
         {canEdit && !viewingRevision ? (
-          <input
-            value={titleDraft}
-            onChange={(e) => setTitleDraft(e.target.value)}
-            onBlur={saveTitle}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") e.currentTarget.blur();
-            }}
-            disabled={titleSaving}
-            placeholder={t("titlePlaceholder")}
-            className="text-xl font-semibold text-slate-800 flex-1 min-w-0 rounded px-1 -mx-1 focus:outline-none focus:ring-1 focus:ring-rose-400"
-          />
+          <>
+            <input
+              value={titleDraft}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onBlur={saveTitle}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") e.currentTarget.blur();
+              }}
+              disabled={titleSaving}
+              placeholder={t("titlePlaceholder")}
+              className="print:hidden text-xl font-semibold text-slate-800 flex-1 min-w-0 rounded px-1 -mx-1 focus:outline-none focus:ring-1 focus:ring-rose-400"
+            />
+            {/* An <input> prints as a form control, not readable text -- this
+                is what actually shows up in the PDF/print output instead. */}
+            <h1 className="hidden print:block text-xl font-semibold text-slate-800 flex-1 min-w-0">{note.title}</h1>
+          </>
         ) : (
           <h1 className="text-xl font-semibold text-slate-800 flex-1 min-w-0 truncate">{note.title}</h1>
         )}
@@ -369,16 +482,21 @@ export default function NoteThread({ noteId }: Props) {
 
       <div className="flex items-center gap-2">
         {canEdit && !viewingRevision ? (
-          <select
-            value={note.visibility}
-            onChange={(e) => saveVisibility(e.target.value as Visibility)}
-            disabled={visibilitySaving}
-            className="text-xs px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 border-none focus:outline-none focus:ring-1 focus:ring-rose-400 disabled:opacity-50"
-          >
-            <option value="private">{t("visibility.private")}</option>
-            <option value="team">{t("visibility.team")}</option>
-            <option value="organization">{t("visibility.organization")}</option>
-          </select>
+          <>
+            <select
+              value={note.visibility}
+              onChange={(e) => saveVisibility(e.target.value as Visibility)}
+              disabled={visibilitySaving}
+              className="print:hidden text-xs px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 border-none focus:outline-none focus:ring-1 focus:ring-rose-400 disabled:opacity-50"
+            >
+              <option value="private">{t("visibility.private")}</option>
+              <option value="team">{t("visibility.team")}</option>
+              <option value="organization">{t("visibility.organization")}</option>
+            </select>
+            <span className="hidden print:inline-block text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
+              {t(`visibility.${note.visibility}`)}
+            </span>
+          </>
         ) : (
           <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
             {t(`visibility.${note.visibility}`)}
@@ -412,22 +530,37 @@ export default function NoteThread({ noteId }: Props) {
             {deleteIcon}
           </IconButton>
         )}
+        <div className="w-px h-4 bg-slate-200 print:hidden" />
+        <IconButton title={t("exportMarkdown")} onClick={exportMarkdown}>
+          {downloadMarkdownIcon}
+        </IconButton>
+        <IconButton title={t("exportHtml")} onClick={exportHtml}>
+          {downloadHtmlIcon}
+        </IconButton>
+        <IconButton title={t("exportPdf")} onClick={exportPdf}>
+          {printIcon}
+        </IconButton>
       </div>
 
       {viewingRevision && (
-        <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        // print:border-2 (not just the screen border-1) + font-semibold so
+        // the stamp stays legible in print even if the browser has
+        // "print background colors" off (bg-amber-50 alone wouldn't survive
+        // that) -- this is what makes the exported PDF unmistakably marked
+        // as a superseded version.
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-300 print:border-2 print:border-amber-700 bg-amber-50 px-3 py-2 text-xs text-amber-800 print:font-semibold">
           <span>{t("viewingOldVersion", { n: viewingRevision.version })}</span>
           <button
             type="button"
             onClick={() => setViewingRevision(null)}
-            className="font-medium underline hover:no-underline shrink-0"
+            className="font-medium underline hover:no-underline shrink-0 print:hidden"
           >
             {t("showLatest")}
           </button>
         </div>
       )}
 
-      {versionMessage && <p className="text-xs text-green-700">{versionMessage}</p>}
+      {versionMessage && <p className="text-xs text-green-700 print:hidden">{versionMessage}</p>}
 
       {editing ? (
         <div className="space-y-2">
@@ -479,14 +612,14 @@ export default function NoteThread({ noteId }: Props) {
         <button
           type="button"
           onClick={() => setHistoryOpen(true)}
-          className="block text-xs text-slate-400 hover:text-rose-700"
+          className="block text-xs text-slate-400 hover:text-rose-700 print:hidden"
         >
           {t("olderReplies", { count: olderReplies.length })}
         </button>
       )}
 
       {!viewingRevision && (
-        <div className="border-t border-slate-200 pt-4 space-y-2">
+        <div className="border-t border-slate-200 pt-4 space-y-2 print:hidden">
           <MarkdownComposer value={replyDraft} onChange={setReplyDraft} placeholder={t("replyPlaceholder")} disabled={replying} rows={3} />
           <div className="flex justify-end">
             <button
@@ -516,6 +649,14 @@ export default function NoteThread({ noteId }: Props) {
 
       {deleteModalOpen && (
         <DeleteNoteModal onConfirm={deleteThisNote} onCancel={() => setDeleteModalOpen(false)} />
+      )}
+
+      {pendingExport && viewingRevision && (
+        <ConfirmExportOldVersionModal
+          version={viewingRevision.version}
+          onConfirm={confirmPendingExport}
+          onCancel={() => setPendingExport(null)}
+        />
       )}
     </div>
   );
