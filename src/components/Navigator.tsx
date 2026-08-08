@@ -10,6 +10,7 @@ import { createSpace, listSpaces, search, type SearchHit, type Space } from "@/l
 import PageTree from "@/components/PageTree";
 import NoteTree from "@/components/NoteTree";
 import RefreshControl from "@/components/RefreshControl";
+import { folderIcon, folderOpenIcon } from "@/components/Icon";
 
 const SEARCH_DEBOUNCE_MS = 300;
 
@@ -159,15 +160,18 @@ export default function Navigator() {
                   <button
                     type="button"
                     onClick={() => toggleSpace(space.id)}
-                    className="flex w-full items-center gap-1 rounded px-2 py-1.5 text-left font-medium text-slate-700 hover:bg-slate-100"
+                    className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left font-medium text-slate-700 hover:bg-slate-100"
                   >
-                    <span className="shrink-0 w-4 text-xs text-slate-400">
+                    <span className="shrink-0 w-3 text-xs text-slate-400">
                       {expandedSpaces.has(space.id) ? "▾" : "▸"}
+                    </span>
+                    <span className="shrink-0 text-slate-400">
+                      {expandedSpaces.has(space.id) ? folderOpenIcon : folderIcon}
                     </span>
                     <span className="truncate">{space.name}</span>
                   </button>
                   {expandedSpaces.has(space.id) && (
-                    <div className="pl-2">
+                    <div className="ml-4 border-l-2 border-slate-200 pl-2">
                       <PageTree spaceId={space.id} />
                     </div>
                   )}

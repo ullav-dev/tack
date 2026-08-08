@@ -27,48 +27,10 @@ import VersionHistory from "@/components/VersionHistory";
 import DeleteNoteModal from "@/components/DeleteNoteModal";
 import ConfirmExportOldVersionModal from "@/components/ConfirmExportOldVersionModal";
 import { downloadFile, escapeHtml, slugify, wrapHtmlDocument } from "@/lib/export";
+import { Icon, IconButton, editIcon, deleteIcon } from "@/components/Icon";
 
 interface Props {
   noteId: string;
-}
-
-function Icon({ children }: { children: React.ReactNode }) {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" className="w-4 h-4">
-      {children}
-    </svg>
-  );
-}
-
-// Same w-6/h-6 icon-button shape as MarkdownToolbar/EditorToolbar, so
-// these read as the same family of control rather than a one-off.
-function IconButton({
-  title,
-  onClick,
-  disabled,
-  danger,
-  children,
-}: {
-  title: string;
-  onClick: () => void;
-  disabled?: boolean;
-  danger?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      title={title}
-      aria-label={title}
-      onClick={onClick}
-      disabled={disabled}
-      className={`w-6 h-6 rounded flex items-center justify-center transition-colors disabled:opacity-40 print:hidden ${
-        danger ? "text-slate-400 hover:text-red-600 hover:bg-red-50" : "text-slate-400 hover:text-rose-700 hover:bg-slate-100"
-      }`}
-    >
-      {children}
-    </button>
-  );
 }
 
 const historyIcon = (
@@ -84,19 +46,6 @@ const saveVersionIcon = (
     <path d="M3 2.5h7.5L13 5v8a.5.5 0 0 1-.5.5h-9A.5.5 0 0 1 3 13V3a.5.5 0 0 1 .5-.5Z" strokeLinejoin="round" />
     <path d="M5.5 2.5v3h4v-3" strokeLinejoin="round" />
     <path d="M5.5 9h5v4.5h-5V9Z" strokeLinejoin="round" />
-  </Icon>
-);
-
-const editIcon = (
-  <Icon>
-    <path d="M10.5 2.5 13.5 5.5 5.5 13.5H2.5v-3L10.5 2.5Z" strokeLinejoin="round" />
-  </Icon>
-);
-
-const deleteIcon = (
-  <Icon>
-    <path d="M3 4.5h10M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M4.5 4.5 5 13a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1l.5-8.5" strokeLinecap="round" strokeLinejoin="round" />
   </Icon>
 );
 

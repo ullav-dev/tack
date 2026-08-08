@@ -7,6 +7,7 @@ import { Link, useRouter } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePageEvents } from "@/contexts/PageEventsContext";
 import { createPage, listPages, type Page } from "@/lib/tack-server-api";
+import { IconButton, pageIcon, plusIcon } from "@/components/Icon";
 
 interface Props {
   spaceId: string;
@@ -21,6 +22,14 @@ const ROOT_KEY = "";
  * on first expand (not all up front) and cached by parent id, with a
  * "generation" ref so a stale in-flight fetch from a space the user has
  * since navigated away from can't clobber the current tree's state.
+ *
+ * Each level's children are indented via a wrapper (a left border + inset,
+ * the same "thread" treatment NoteTree.tsx uses for a folder's notes) --
+ * not depth-scaled inline padding on the row itself, which reads as
+ * ambiguous once you're more than one level deep. A page always shows its
+ * own document icon (`pageIcon`) next to its toggle, even when it has
+ * children -- a page is real content in its own right, unlike a Space or a
+ * Notes folder, which are pure containers and get a folder icon instead.
  *
  * Unlike RepoTreePanel, there's no "expand ancestors of the currently open
  * item" effect here — a page's materialized `path` would let this be done,
@@ -143,10 +152,10 @@ export default function PageTree({ spaceId }: Props) {
     }
   }
 
-  function renderCreateRow(parentId: string, depth: number) {
+  function renderCreateRow(parentId: string) {
     if (creatingUnder !== parentId) return null;
     return (
-      <div className="flex items-center gap-1 py-1" style={{ paddingLeft: `${depth * 14 + 24}px` }}>
+      <div className="flex items-center gap-1 px-2 py-1">
         <input
           autoFocus
           value={newTitle}
@@ -182,14 +191,10 @@ export default function PageTree({ spaceId }: Props) {
     });
   }
 
-  function renderLevel(parentId: string, depth: number) {
+  function renderLevel(parentId: string) {
     const entries = children[parentId];
     if (!entries) {
-      return loading.has(parentId) ? (
-        <p className="text-xs text-slate-400" style={{ paddingLeft: `${depth * 14 + 24}px` }}>
-          …
-        </p>
-      ) : null;
+      return loading.has(parentId) ? <p className="px-2 py-1 text-xs text-slate-400">…</p> : null;
     }
     return (
       <div>
@@ -204,41 +209,43 @@ export default function PageTree({ spaceId }: Props) {
           return (
             <div key={page.id}>
               <div
-                className={`group flex items-center gap-1 py-1 text-sm rounded ${
-                  isSelected ? "bg-rose-50 text-rose-700 font-medium" : "text-slate-700"
+                className={`group flex items-center gap-1.5 rounded px-2 py-1 text-sm ${
+                  isSelected ? "bg-rose-50 text-rose-700 font-medium" : "text-slate-700 hover:bg-slate-100"
                 }`}
-                style={{ paddingLeft: `${depth * 14 + 10}px` }}
               >
                 {showToggle ? (
                   <button
                     type="button"
                     onClick={() => toggle(page.id)}
-                    className="shrink-0 w-4 text-xs text-slate-400 hover:text-slate-600"
+                    className="shrink-0 w-3 text-xs text-slate-400 hover:text-slate-600"
                     aria-label={isExpanded ? "Collapse" : "Expand"}
                   >
                     {isExpanded ? "▾" : "▸"}
                   </button>
                 ) : (
-                  <span className="shrink-0 w-4" />
+                  <span className="shrink-0 w-3" />
                 )}
-                <Link href={`/spaces/${spaceId}/pages/${page.id}`} className="truncate hover:underline flex-1 min-w-0">
+                <span className={`shrink-0 ${isSelected ? "text-rose-400" : "text-slate-300"}`}>{pageIcon}</span>
+                <Link href={`/spaces/${spaceId}/pages/${page.id}`} className="truncate flex-1 min-w-0">
                   {page.title}
                 </Link>
-                <button
-                  type="button"
+                <IconButton
+                  title={t("newPage")}
                   onClick={() => {
                     setExpanded((prev) => new Set(prev).add(page.id));
                     load(page.id);
                     setCreatingUnder(page.id);
                   }}
-                  className="shrink-0 w-4 text-xs text-slate-300 opacity-0 group-hover:opacity-100 hover:text-slate-600"
-                  aria-label={t("newPage")}
                 >
-                  +
-                </button>
+                  <span className="opacity-0 group-hover:opacity-100">{plusIcon}</span>
+                </IconButton>
               </div>
-              {isExpanded && renderLevel(page.id, depth + 1)}
-              {isExpanded && renderCreateRow(page.id, depth + 1)}
+              {isExpanded && (
+                <div className="ml-4 border-l-2 border-slate-200 pl-2">
+                  {renderLevel(page.id)}
+                  {renderCreateRow(page.id)}
+                </div>
+              )}
             </div>
           );
         })}
@@ -249,8 +256,8 @@ export default function PageTree({ spaceId }: Props) {
   if (error) return <p className="px-2 text-xs text-red-600">{error}</p>;
   return (
     <div>
-      {renderLevel(ROOT_KEY, 0)}
-      {renderCreateRow(ROOT_KEY, 0)}
+      {renderLevel(ROOT_KEY)}
+      {renderCreateRow(ROOT_KEY)}
       <button
         type="button"
         onClick={() => setCreatingUnder(ROOT_KEY)}
