@@ -568,9 +568,13 @@ export default function NoteThread({ noteId }: Props) {
             ))}
           </select>
         )}
-        {!note.parent_id && note.folder_id && (!canEdit || viewingRevision) && (
+        {/* Only rendered once the folder's name is actually known -- a
+            failed/forbidden folders fetch (e.g. an admin who isn't a member
+            of this note's own team) must not show a genuinely-filed note as
+            "Unfiled", which is the wrong label, not just a missing one. */}
+        {!note.parent_id && note.folder_id && (!canEdit || viewingRevision) && folders?.find((f) => f.id === note.folder_id) && (
           <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
-            {folders?.find((f) => f.id === note.folder_id)?.name ?? t("folderUnfiled")}
+            {folders.find((f) => f.id === note.folder_id)!.name}
           </span>
         )}
         <span className="text-xs text-slate-400">

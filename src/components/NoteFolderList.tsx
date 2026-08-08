@@ -108,8 +108,12 @@ export default function NoteFolderList({ selected, onSelect }: Props) {
 
   async function handleRename(folder: NoteFolder) {
     const name = renameDraft.trim();
-    if (!token || !name || renaming) return;
-    if (name === folder.name) {
+    if (renaming) return;
+    // Blurring with an empty (or unchanged) draft just closes the input --
+    // matches the "+ New folder" input's own blur-on-empty escape hatch,
+    // so clearing the field and clicking away doesn't leave it stuck open
+    // with no way out but Escape.
+    if (!token || !name || name === folder.name) {
       setRenamingId(null);
       return;
     }
