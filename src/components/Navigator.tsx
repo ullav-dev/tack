@@ -4,8 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTeam } from "@/contexts/TeamContext";
 import { useNoteEvents } from "@/contexts/NoteEventsContext";
-import { listSpaces, search, type SearchHit, type Space } from "@/lib/tack-server-api";
+import { createSpace, listSpaces, search, type SearchHit, type Space } from "@/lib/tack-server-api";
 import PageTree from "@/components/PageTree";
 import NotesList from "@/components/NotesList";
 import RefreshControl from "@/components/RefreshControl";
@@ -20,12 +21,17 @@ const SEARCH_DEBOUNCE_MS = 300;
  * (see PageTree.tsx). */
 export default function Navigator() {
   const { token } = useAuth();
+  const { activeTeam } = useTeam();
   const { triggerRefresh } = useNoteEvents();
   const t = useTranslations("navigator");
 
   const [spaces, setSpaces] = useState<Space[] | null>(null);
   const [spacesError, setSpacesError] = useState<string | null>(null);
   const [expandedSpaces, setExpandedSpaces] = useState<Set<string>>(new Set());
+  const [creatingSpace, setCreatingSpace] = useState(false);
+  const [newSpaceName, setNewSpaceName] = useState("");
+  const [savingSpace, setSavingSpace] = useState(false);
+  const [createSpaceError, setCreateSpaceError] = useState<string | null>(null);
 
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchHit[] | null>(null);
@@ -92,6 +98,24 @@ export default function Navigator() {
     });
   }
 
+  async function handleCreateSpace() {
+    const name = newSpaceName.trim();
+    if (!token || !activeTeam || !name || savingSpace) return;
+    setSavingSpace(true);
+    setCreateSpaceError(null);
+    try {
+      const space = await createSpace(token, { team_id: activeTeam.id, name });
+      setSpaces((prev) => [...(prev ?? []), space]);
+      setExpandedSpaces((prev) => new Set(prev).add(space.id));
+      setCreatingSpace(false);
+      setNewSpaceName("");
+    } catch (e) {
+      setCreateSpaceError((e as Error).message);
+    } finally {
+      setSavingSpace(false);
+    }
+  }
+
   return (
     <nav className="h-full flex flex-col text-sm border-r border-slate-200 bg-white">
       <div className="p-2 border-b border-slate-100 shrink-0">
@@ -149,6 +173,40 @@ export default function Navigator() {
                   )}
                 </div>
               ))}
+              {creatingSpace && (
+                <div className="px-2 py-1">
+                  <input
+                    autoFocus
+                    value={newSpaceName}
+                    onChange={(e) => setNewSpaceName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleCreateSpace();
+                      if (e.key === "Escape") {
+                        setCreatingSpace(false);
+                        setNewSpaceName("");
+                      }
+                    }}
+                    onBlur={() => {
+                      if (!newSpaceName.trim()) setCreatingSpace(false);
+                    }}
+                    disabled={savingSpace}
+                    placeholder={t("newSpaceName")}
+                    className="w-full text-sm rounded border border-slate-200 px-1.5 py-0.5 focus:border-rose-400 focus:outline-none"
+                  />
+                </div>
+              )}
+              {createSpaceError && <p className="px-2 py-1 text-xs text-red-600">{createSpaceError}</p>}
+              {activeTeam ? (
+                <button
+                  type="button"
+                  onClick={() => setCreatingSpace(true)}
+                  className="w-full text-left px-2.5 py-1 text-xs font-medium text-rose-700 hover:underline"
+                >
+                  + {t("newSpace")}
+                </button>
+              ) : (
+                <p className="px-2 py-1 text-xs text-slate-400">{t("selectTeamFirst")}</p>
+              )}
             </div>
           </>
         )}

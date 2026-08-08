@@ -32,6 +32,8 @@
     "notIndexedYet": "Not yet linkable — page search indexing is still pending",
     "newPage": "New page",
     "newPageTitle": "Page title…",
+    "newSpace": "New space",
+    "newSpaceName": "Space name…",
     "newNote": "New note"
   },
   "editor": {
