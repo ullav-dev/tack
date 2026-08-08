@@ -163,6 +163,10 @@ export interface Note {
   organization_id: string;
   team_id: string | null;
   parent_id: string | null;
+  /** The folder this note is filed under, or `null` if unfiled. Only ever
+   * set on a top-level note (`parent_id === null`) -- server-enforced, see
+   * tack-server's `008_note_folders.sql`. */
+  folder_id: string | null;
   visibility: Visibility;
   /** Empty for replies -- only top-level notes collect a title. */
   title: string;
@@ -196,11 +200,15 @@ export interface NoteRevision {
 export const listNotes = (
   token: string,
   teamId: string,
-  opts: { limit?: number; offset?: number } = {}
+  opts: { limit?: number; offset?: number; folderId?: string; unfiled?: boolean } = {}
 ): Promise<NotesPage> => {
   const params = new URLSearchParams({ team_id: teamId });
   if (opts.limit !== undefined) params.set("limit", String(opts.limit));
   if (opts.offset !== undefined) params.set("offset", String(opts.offset));
+  // Mutually exclusive, mirroring tack-server's own validation -- omitting
+  // both preserves the original unfiltered "every note in the team" behavior.
+  if (opts.folderId) params.set("folder_id", opts.folderId);
+  else if (opts.unfiled) params.set("unfiled", "true");
   return apiRequest(`/notes?${params.toString()}`, token);
 };
 
@@ -208,13 +216,18 @@ export const getNote = (token: string, id: string): Promise<Note> => apiRequest(
 
 export const createNote = (
   token: string,
-  payload: { team_id: string; visibility: Visibility; title: string; body_markdown: string }
+  payload: { team_id: string; visibility: Visibility; title: string; body_markdown: string; folder_id?: string }
 ): Promise<Note> => apiRequest("/notes", token, { method: "POST", body: JSON.stringify(payload) });
 
+/** `folder_id` is tri-state: omit to leave the note's folder unchanged,
+ * `null` to unfile it, or a folder id to file/move it there -- matches
+ * tack-server's `UpdateNoteRequest` exactly (`JSON.stringify` drops an
+ * `undefined` key entirely, but keeps an explicit `null`, which is exactly
+ * the omitted-vs-null distinction the backend needs). */
 export const updateNote = (
   token: string,
   id: string,
-  payload: { title?: string; body_markdown?: string; visibility?: Visibility }
+  payload: { title?: string; body_markdown?: string; visibility?: Visibility; folder_id?: string | null }
 ): Promise<Note> => apiRequest(`/notes/${id}`, token, { method: "PATCH", body: JSON.stringify(payload) });
 
 /** Soft-deletes a note or reply -- same endpoint, same creator-or-admin ACL
@@ -227,6 +240,39 @@ export const listReplies = (token: string, id: string): Promise<Note[]> => apiRe
 
 export const createReply = (token: string, id: string, body_markdown: string): Promise<Note> =>
   apiRequest(`/notes/${id}/replies`, token, { method: "POST", body: JSON.stringify({ body_markdown }) });
+
+/** A flat (non-nested), per-team grouping for top-level notes -- see
+ * tack-server's `008_note_folders.sql`. Carries no visibility of its own:
+ * any member of `team_id` may create/rename/delete one; each note's own
+ * `Visibility` still governs who can see it once filed. */
+export interface NoteFolder {
+  id: string;
+  organization_id: string;
+  team_id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+  /** Count of top-level notes currently filed here, denormalized at read
+   * time -- lets the UI show a count and a delete confirmation warn how
+   * many notes will be unfiled without a separate fetch. */
+  note_count: number;
+}
+
+export const listNoteFolders = (token: string, teamId?: string): Promise<NoteFolder[]> => {
+  const params = teamId ? `?team_id=${teamId}` : "";
+  return apiRequest(`/note-folders${params}`, token);
+};
+
+export const createNoteFolder = (token: string, payload: { team_id: string; name: string }): Promise<NoteFolder> =>
+  apiRequest("/note-folders", token, { method: "POST", body: JSON.stringify(payload) });
+
+export const renameNoteFolder = (token: string, id: string, name: string): Promise<NoteFolder> =>
+  apiRequest(`/note-folders/${id}`, token, { method: "PATCH", body: JSON.stringify({ name }) });
+
+/** Deletes the folder. Notes filed in it are unfiled (`folder_id` cleared),
+ * not deleted along with it -- see `db::note_folders::delete_folder`. */
+export const deleteNoteFolder = (token: string, id: string): Promise<void> =>
+  apiRequest(`/note-folders/${id}`, token, { method: "DELETE" });
 
 export const listRevisions = (token: string, id: string): Promise<NoteRevision[]> =>
   apiRequest(`/notes/${id}/revisions`, token);
