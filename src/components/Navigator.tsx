@@ -8,8 +8,7 @@ import { useTeam } from "@/contexts/TeamContext";
 import { useNoteEvents } from "@/contexts/NoteEventsContext";
 import { createSpace, listSpaces, search, type SearchHit, type Space } from "@/lib/tack-server-api";
 import PageTree from "@/components/PageTree";
-import NotesList from "@/components/NotesList";
-import NoteFolderList, { type NoteFolderFilter } from "@/components/NoteFolderList";
+import NoteTree from "@/components/NoteTree";
 import RefreshControl from "@/components/RefreshControl";
 
 const SEARCH_DEBOUNCE_MS = 300;
@@ -17,9 +16,9 @@ const SEARCH_DEBOUNCE_MS = 300;
 /** Left-hand workspace Navigator: a search box (wired to tack-server's
  * hybrid GET /search, ACL-filtered server-side) that replaces the browse
  * view while a query is active, and — when not searching — the browsable
- * structure: a Notes section (paginated, for the active team) and a Spaces
- * section, each space expandable into its own lazily-loaded Page tree
- * (see PageTree.tsx). */
+ * structure: a Notes section (a real folder tree, see NoteTree.tsx) and a
+ * Spaces section, each space expandable into its own lazily-loaded Page
+ * tree (see PageTree.tsx). */
 export default function Navigator() {
   const { token } = useAuth();
   const { activeTeam } = useTeam();
@@ -33,8 +32,6 @@ export default function Navigator() {
   const [newSpaceName, setNewSpaceName] = useState("");
   const [savingSpace, setSavingSpace] = useState(false);
   const [createSpaceError, setCreateSpaceError] = useState<string | null>(null);
-
-  const [folderFilter, setFolderFilter] = useState<NoteFolderFilter>("all");
 
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchHit[] | null>(null);
@@ -92,13 +89,6 @@ export default function Navigator() {
     };
   }, [query, token]);
 
-  // A folder id only makes sense within the team it belongs to -- reset to
-  // "all" on team switch rather than carrying over a filter that would
-  // silently scope NotesList to a folder from a different team's namespace.
-  useEffect(() => {
-    setFolderFilter("all");
-  }, [activeTeam?.id]);
-
   function toggleSpace(spaceId: string) {
     setExpandedSpaces((prev) => {
       const next = new Set(prev);
@@ -155,8 +145,7 @@ export default function Navigator() {
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t("notes")}</span>
               <RefreshControl onRefresh={triggerRefresh} storageKey="tack_notes_refresh_interval" />
             </div>
-            <NoteFolderList selected={folderFilter} onSelect={setFolderFilter} />
-            <NotesList folderFilter={folderFilter} />
+            <NoteTree />
 
             <div className="px-4 pt-4 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
               {t("spaces")}

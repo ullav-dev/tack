@@ -21,13 +21,13 @@ interface NoteEventsContextValue {
 const NoteEventsContext = createContext<NoteEventsContextValue | null>(null);
 
 /** Same small pub/sub shape as `PageEventsContext` (see that file for the
- * full rationale) — NotesList (left panel) needs to learn about a title
+ * full rationale) — NoteTree (left panel) needs to learn about a title
  * edit made in NoteThread (right panel); they're siblings with no other
  * shared state. Kept as its own separate context rather than generalizing
  * `PageEventsContext` to cover both content types, matching this codebase's
  * preference for a second small copy over a premature shared abstraction.
  *
- * Also carries a deletion pub/sub (NotesList drops a note from its cached
+ * Also carries a deletion pub/sub (NoteTree drops a note from its cached
  * list the moment it's deleted in NoteThread, rather than waiting for the
  * next refresh tick), and a second, independent pub/sub for the shared
  * auto/manual refresh timer: one `RefreshControl` lives in the Navigator
