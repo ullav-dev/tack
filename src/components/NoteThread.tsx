@@ -12,10 +12,12 @@ import {
   createRevision,
   deleteNote,
   getNote,
+  listNoteFolders,
   listReplies,
   listRevisions,
   updateNote,
   type Note,
+  type NoteFolder,
   type NoteRevision,
   type Visibility,
 } from "@/lib/tack-server-api";
@@ -202,6 +204,9 @@ export default function NoteThread({ noteId }: Props) {
 
   const [visibilitySaving, setVisibilitySaving] = useState(false);
 
+  const [folders, setFolders] = useState<NoteFolder[] | null>(null);
+  const [folderSaving, setFolderSaving] = useState(false);
+
   const [editing, setEditing] = useState(false);
   const [bodyDraft, setBodyDraft] = useState("");
   const [saving, setSaving] = useState(false);
@@ -270,6 +275,27 @@ export default function NoteThread({ noteId }: Props) {
     });
   }, [subscribeRefresh, token, noteId, editing]);
 
+  // Folders are only ever relevant to a top-level note (replies can't be
+  // filed -- server-enforced, see tack-server's notes_folder_id_top_level_only
+  // CHECK constraint), and only once the note's own team is known.
+  useEffect(() => {
+    if (!token || !note?.team_id) {
+      setFolders(null);
+      return;
+    }
+    let cancelled = false;
+    listNoteFolders(token, note.team_id)
+      .then((f) => {
+        if (!cancelled) setFolders(f);
+      })
+      .catch(() => {
+        /* Non-fatal: the folder selector just won't offer choices. */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, note?.team_id]);
+
   const canEdit = Boolean(user) && (user!.id === note?.created_by || isAdmin(token));
 
   async function saveTitle() {
@@ -296,6 +322,27 @@ export default function NoteThread({ noteId }: Props) {
       setError((e as Error).message);
     } finally {
       setVisibilitySaving(false);
+    }
+  }
+
+  /** `next` is a folder id, or `"unfiled"` (the select's sentinel option for
+   * `null`, since `<option>` values are always strings). Broadcasts the
+   * change over the same pub/sub NoteThread already uses for title edits,
+   * so NotesList drops the note if it's moved out of the folder currently
+   * being viewed, and NoteFolderList refreshes its note_count badges. */
+  async function saveFolder(next: string) {
+    if (!token || !note) return;
+    const folderId = next === "unfiled" ? null : next;
+    if (folderId === note.folder_id) return;
+    setFolderSaving(true);
+    try {
+      const updated = await updateNote(token, note.id, { folder_id: folderId });
+      setNote(updated);
+      notifyNoteUpdated(updated.id, { folder_id: updated.folder_id });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setFolderSaving(false);
     }
   }
 
@@ -500,6 +547,34 @@ export default function NoteThread({ noteId }: Props) {
         ) : (
           <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
             {t(`visibility.${note.visibility}`)}
+          </span>
+        )}
+        {/* Folder assignment: only a top-level note can be filed (a reply's
+            folder_id is server-rejected), and only once its team's folders
+            have loaded -- print:hidden since a folder is a browse-time
+            organizational detail, not part of the note's own content. */}
+        {!note.parent_id && canEdit && !viewingRevision && folders && (
+          <select
+            value={note.folder_id ?? "unfiled"}
+            onChange={(e) => saveFolder(e.target.value)}
+            disabled={folderSaving}
+            className="print:hidden text-xs px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 border-none focus:outline-none focus:ring-1 focus:ring-rose-400 disabled:opacity-50"
+          >
+            <option value="unfiled">{t("folderUnfiled")}</option>
+            {folders.map((folder) => (
+              <option key={folder.id} value={folder.id}>
+                {folder.name}
+              </option>
+            ))}
+          </select>
+        )}
+        {/* Only rendered once the folder's name is actually known -- a
+            failed/forbidden folders fetch (e.g. an admin who isn't a member
+            of this note's own team) must not show a genuinely-filed note as
+            "Unfiled", which is the wrong label, not just a missing one. */}
+        {!note.parent_id && note.folder_id && (!canEdit || viewingRevision) && folders?.find((f) => f.id === note.folder_id) && (
+          <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
+            {folders.find((f) => f.id === note.folder_id)!.name}
           </span>
         )}
         <span className="text-xs text-slate-400">

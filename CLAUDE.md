@@ -28,9 +28,11 @@ This is currently **Phase 1**: Tack is being built as a first-class, standalone 
 - **Component reuse:** reuse existing shared local packages where they fit (e.g. `DamPicker`, currently duplicated per-repo in `togra/packages/dam-picker` and `clann-webapp/packages/dam-picker`) rather than rebuilding equivalent UI from scratch — not yet wired in, since Notes/Pages content UI (where DAM embeds matter) hasn't been built yet.
 - **Build for reuse:** Tack's own core pieces (note-thread view, TipTap+Yjs page editor, reference/mention picker) should be factored into embeddable local packages from the start (mirroring the `packages/dam-picker` pattern), since other Ullav apps will pull these in during later migration phases.
 
-## Current State (Phase 1, auth/i18n bootstrap)
+## Current State (Phase 1, auth/i18n bootstrap + Notes/Pages content UI)
 
-Login, i18n (en/de/ga), user profile (first/last name + avatar via `MyDetailsModal`), and team switching are implemented, matching togra/cunav/lagan's patterns exactly (see `src/contexts/AuthContext.tsx`, `src/contexts/TeamContext.tsx`, `src/lib/auth-api.ts`, `src/components/Nav.tsx`). There is no Notes/Pages content UI yet, and `tack-server` doesn't exist as code yet — the `/api/*` proxy rule in `src/proxy.ts` is wired ahead of that, pointing at the reserved port 8087.
+Login, i18n (en/de/ga), user profile (first/last name + avatar via `MyDetailsModal`), and team switching are implemented, matching togra/cunav/lagan's patterns exactly (see `src/contexts/AuthContext.tsx`, `src/contexts/TeamContext.tsx`, `src/lib/auth-api.ts`, `src/components/Nav.tsx`). `tack-server` now exists and is wired up (`API_URL`, default port 8087, via the `/api/*` proxy rule in `src/proxy.ts`).
+
+Notes and Pages content UI is implemented against `tack-server`'s REST API (`src/lib/tack-server-api.ts`): the left-hand `Navigator` (search, a Notes list + folders, and a Spaces tree of lazily-loaded `PageTree`s) and the right-hand `NoteThread`/`PageEditor` detail panes, with version history, page cross-references, and export (Markdown/HTML/PDF) — see each component's own doc comment for specifics. Notes support flat, per-team folders (create/rename/delete via `NoteFolderList`, file/move/unfile a note via a `NoteThread` selector) — matches tack-server's `note_folders`, deliberately non-nested.
 
 `TeamAvatar` renders a team's `avatar_url` as a plain HTTPS image (unlike togra's `TeamAvatar`, which resolves Comad DAM asset thumbnails through an authenticated proxy) — Tack has no DAM proxy yet, so that richer behaviour is deferred until DAM integration lands alongside the Notes/Pages content features.
 

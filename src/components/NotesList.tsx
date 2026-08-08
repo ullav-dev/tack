@@ -8,21 +8,35 @@ import { useTeam } from "@/contexts/TeamContext";
 import { createNote, listNotes, type Note, type Visibility } from "@/lib/tack-server-api";
 import MarkdownComposer from "@/components/MarkdownComposer";
 import { useNoteEvents } from "@/contexts/NoteEventsContext";
+import type { NoteFolderFilter } from "@/components/NoteFolderList";
 
 const PAGE_SIZE = 20;
+
+/** Translates a `NoteFolderFilter` into `listNotes`' folder-scoping opts. */
+function folderOpts(filter: NoteFolderFilter): { folderId?: string; unfiled?: boolean } {
+  if (filter === "all") return {};
+  if (filter === "unfiled") return { unfiled: true };
+  return { folderId: filter };
+}
+
+interface Props {
+  /** Scopes the list to a folder, unfiled notes, or (the default) every
+   * note in the team -- see NoteFolderList.tsx. */
+  folderFilter?: NoteFolderFilter;
+}
 
 /** Paginated (limit/offset, via GET /notes) top-level notes list for the
  * active team — a team's note volume isn't bounded, so this loads a page
  * at a time rather than everything up front. Resets (and discards any
- * stale in-flight fetch, via `generationRef`) whenever the active team
- * changes. Also refetches on the shared refresh timer/button (see
- * NoteEventsContext.tsx), so a note created by someone else appears
+ * stale in-flight fetch, via `generationRef`) whenever the active team or
+ * `folderFilter` changes. Also refetches on the shared refresh timer/button
+ * (see NoteEventsContext.tsx), so a note created by someone else appears
  * without a manual reload. */
-export default function NotesList() {
+export default function NotesList({ folderFilter = "all" }: Props) {
   const { token } = useAuth();
   const { activeTeam } = useTeam();
   const router = useRouter();
-  const { subscribe, subscribeDeleted, subscribeRefresh } = useNoteEvents();
+  const { subscribe, subscribeDeleted, subscribeRefresh, notifyNoteUpdated } = useNoteEvents();
   const t = useTranslations("navigator");
   const tNotes = useTranslations("notes");
   const [notes, setNotes] = useState<Note[]>([]);
@@ -46,7 +60,7 @@ export default function NotesList() {
     setError(null);
     if (!token || !activeTeam) return;
     setLoading(true);
-    listNotes(token, activeTeam.id, { limit: PAGE_SIZE, offset: 0 })
+    listNotes(token, activeTeam.id, { limit: PAGE_SIZE, offset: 0, ...folderOpts(folderFilter) })
       .then((page) => {
         if (generation !== generationRef.current) return;
         setNotes(page.notes);
@@ -58,17 +72,27 @@ export default function NotesList() {
       .finally(() => {
         if (generation === generationRef.current) setLoading(false);
       });
-  }, [token, activeTeam]);
+  }, [token, activeTeam, folderFilter]);
 
   // NoteThread (a sibling in the right-hand pane) broadcasts metadata
-  // changes -- like a title edit -- through this shared pub/sub, since
-  // there's no other way for this list's own cached notes to learn about
-  // them (see NoteEventsContext.tsx).
+  // changes -- like a title edit, or a folder move -- through this shared
+  // pub/sub, since there's no other way for this list's own cached notes to
+  // learn about them (see NoteEventsContext.tsx). A folder move that takes a
+  // note out of the currently viewed folder also drops it from view here,
+  // not just updates its (now-irrelevant) folder_id in place.
   useEffect(() => {
     return subscribe((noteId, patch) => {
-      setNotes((prev) => prev.map((n) => (n.id === noteId ? { ...n, ...patch } : n)));
+      setNotes((prev) => {
+        const merged = prev.map((n) => (n.id === noteId ? { ...n, ...patch } : n));
+        if (!("folder_id" in patch)) return merged;
+        return merged.filter((n) => {
+          if (folderFilter === "all") return true;
+          if (folderFilter === "unfiled") return n.folder_id === null;
+          return n.folder_id === folderFilter;
+        });
+      });
     });
-  }, [subscribe]);
+  }, [subscribe, folderFilter]);
 
   // NoteThread also broadcasts when the note itself was deleted, so it
   // disappears from this list immediately rather than waiting for the next
@@ -94,7 +118,7 @@ export default function NotesList() {
       const generation = generationRef.current;
       const limit = Math.max(notesLengthRef.current, PAGE_SIZE);
       try {
-        const page = await listNotes(token, activeTeam.id, { limit, offset: 0 });
+        const page = await listNotes(token, activeTeam.id, { limit, offset: 0, ...folderOpts(folderFilter) });
         if (generation !== generationRef.current) return;
         setNotes(page.notes);
         setHasMore(page.has_more);
@@ -102,13 +126,13 @@ export default function NotesList() {
         if (generation === generationRef.current) setError((e as Error).message);
       }
     });
-  }, [subscribeRefresh, token, activeTeam]);
+  }, [subscribeRefresh, token, activeTeam, folderFilter]);
 
   function loadMore() {
     if (!token || !activeTeam || loading) return;
     const generation = generationRef.current;
     setLoading(true);
-    listNotes(token, activeTeam.id, { limit: PAGE_SIZE, offset: notes.length })
+    listNotes(token, activeTeam.id, { limit: PAGE_SIZE, offset: notes.length, ...folderOpts(folderFilter) })
       .then((page) => {
         if (generation !== generationRef.current) return;
         setNotes((prev) => [...prev, ...page.notes]);
@@ -126,12 +150,24 @@ export default function NotesList() {
     if (!token || !activeTeam || !newTitle.trim() || !newBody.trim() || creating) return;
     setCreating(true);
     try {
+      // A new note created while viewing a specific folder is filed into
+      // that folder directly, rather than always landing unfiled -- the
+      // obvious expectation when "New note" is clicked from inside a
+      // folder's own view. Viewing "All notes" or "Unfiled" leaves it
+      // unfiled, same as before folders existed.
+      const folderId = folderFilter !== "all" && folderFilter !== "unfiled" ? folderFilter : undefined;
       const note = await createNote(token, {
         team_id: activeTeam.id,
         visibility: newVisibility,
         title: newTitle.trim(),
         body_markdown: newBody.trim(),
+        folder_id: folderId,
       });
+      // Not an "update" in the strict sense, but reuses the same pub/sub
+      // channel so NoteFolderList's note_count badge picks up the new
+      // folder membership immediately rather than waiting for its own
+      // refresh timer.
+      if (folderId) notifyNoteUpdated(note.id, { folder_id: note.folder_id });
       setNotes((prev) => [note, ...prev]);
       setComposing(false);
       setNewTitle("");
