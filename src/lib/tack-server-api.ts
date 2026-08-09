@@ -372,12 +372,18 @@ export interface SearchResults {
   pages: SearchTypeResults;
 }
 
+/** `teamId` is required -- tack-server scopes every search to one team at a
+ * time now (a hit from a different team used to surface with no
+ * indication why, which read as a visibility bug even though the
+ * underlying per-note ACL enforcement was always correct). Matches
+ * `listNotes`'s own required `teamId`. */
 export const search = (
   token: string,
   q: string,
+  teamId: string,
   opts: { notesLimit?: number; notesOffset?: number; pagesLimit?: number; pagesOffset?: number } = {}
 ): Promise<SearchResults> => {
-  const params = new URLSearchParams({ q });
+  const params = new URLSearchParams({ q, team_id: teamId });
   if (opts.notesLimit !== undefined) params.set("notes_limit", String(opts.notesLimit));
   if (opts.notesOffset !== undefined) params.set("notes_offset", String(opts.notesOffset));
   if (opts.pagesLimit !== undefined) params.set("pages_limit", String(opts.pagesLimit));
