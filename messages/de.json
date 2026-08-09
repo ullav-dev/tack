@@ -8,9 +8,7 @@
   "nav": {
     "signIn": "Anmelden",
     "signOut": "Abmelden",
-    "myDetails": "Mein Profil",
-    "spaces": "Bereiche",
-    "notes": "Notizen"
+    "myDetails": "Mein Profil"
   },
   "navigator": {
     "spaces": "Bereiche",
@@ -52,7 +50,8 @@
     "deleteFolderConfirmTitle": "„{name}“ löschen?",
     "deleteFolderConfirmBodyEmpty": "Dieser Ordner ist leer. Das Löschen kann nicht rückgängig gemacht werden.",
     "deleteFolderConfirmBodyWithNotes": "{count, plural, one {# Notiz} other {# Notizen}} in diesem Ordner werden abgelegt entfernt, nicht gelöscht. Das kann nicht rückgängig gemacht werden.",
-    "newNote": "Neue Notiz"
+    "newNote": "Neue Notiz",
+    "viewInFolder": "Im Ordner anzeigen"
   },
   "editor": {
     "loading": "Wird geladen…",

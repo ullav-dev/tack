@@ -89,7 +89,21 @@ function totalPages(total: number): number {
  * attempted here -- that's a separate, deliberate PR. Icons (`Icon.tsx`)
  * and `Pager` are shared with NoteThread/PageTree/Navigator already, a
  * concrete step in that direction. */
-export default function NoteTree() {
+interface Props {
+  /** Set by Navigator when a search result's "view in folder" action is
+   * clicked -- expands the note's folder (DEFAULT_KEY if unfiled) and
+   * navigates to it, so a note found via search can be seen in its real
+   * tree context instead of only in isolation. `folderId: null` means the
+   * note is unfiled (lands in the virtual Default folder), same convention
+   * `SearchHit.folder_id` already uses. Cleared via `onRevealed` once
+   * handled -- Navigator owns the request's lifetime, not this component,
+   * since the request can arrive before NoteTree is even mounted (switching
+   * from the Spaces tab). */
+  revealRequest?: { noteId: string; folderId: string | null } | null;
+  onRevealed?: () => void;
+}
+
+export default function NoteTree({ revealRequest, onRevealed }: Props = {}) {
   const { token } = useAuth();
   const { activeTeam } = useTeam();
   const router = useRouter();
@@ -277,6 +291,26 @@ export default function NoteTree() {
     return subscribeRefresh(resync);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subscribeRefresh, token, activeTeam]);
+
+  // Handles Navigator's "view in folder" search-result action. Runs after
+  // the mount-reset effect above (declared later, same commit), so
+  // `notesByKeyRef.current` has already been cleared for a fresh
+  // team/token before this checks it. Doesn't try to jump to the exact
+  // page containing the note -- the notes list has no "which page is note
+  // X on" query, and paging manually from an expanded, correctly-scrolled
+  // folder is a reasonable landing point; this at least gets the folder
+  // open, on-screen, and the note itself selected/highlighted if it
+  // happens to be on the loaded first page.
+  useEffect(() => {
+    if (!revealRequest || !token || !activeTeam) return;
+    const key = revealRequest.folderId ?? DEFAULT_KEY;
+    setExpanded((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
+    if (!notesByKeyRef.current[key]) fetchNotes(key, generationRef.current, 1);
+    router.push(`/notes/${revealRequest.noteId}`);
+    document.getElementById(`note-folder-${key}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    onRevealed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [revealRequest, token, activeTeam]);
 
   async function handleCreateFolder() {
     const name = newFolderName.trim();
@@ -510,7 +544,7 @@ export default function NoteTree() {
       );
     }
     return (
-      <div key={id}>
+      <div key={id} id={`note-folder-${id}`}>
         <div className="group flex items-center gap-1 rounded px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-100">
           <button
             type="button"

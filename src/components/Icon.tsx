@@ -26,7 +26,12 @@ export function IconButton({
   children,
 }: {
   title: string;
-  onClick: () => void;
+  // Takes the click event (existing zero-arg callers stay valid -- a
+  // function that ignores its argument is assignable here) so a caller
+  // nested inside a wrapping <Link> or <form>, like Navigator's "view in
+  // folder" button, can stopPropagation()/preventDefault() to avoid
+  // triggering the ancestor's own click behavior.
+  onClick: (e: React.MouseEvent) => void;
   disabled?: boolean;
   danger?: boolean;
   children: React.ReactNode;
