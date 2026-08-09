@@ -24,31 +24,46 @@ import { IconButton, deleteIcon, editIcon, folderIcon, folderOpenIcon, noteIcon 
 
 const PAGE_SIZE = 20;
 
-/** Sentinel key for unfiled, root-level notes -- mirrors PageTree.tsx's
- * `ROOT_KEY` for a space's root pages. Unfiled notes render at the same
- * depth as folder rows, exactly like PageTree renders root pages alongside
- * nothing else -- there is no synthetic "Unfiled" folder to click into. */
-const ROOT_KEY = "";
+/** Sentinel key for the virtual "Default" folder -- every note filed
+ * nowhere else lives here, so there is never a bare, un-contained note in
+ * this tree (see this component's doc comment). Carries no `note_folders`
+ * row of its own -- `folderOpts` maps it to `GET /notes?unfiled=true`,
+ * exactly what the old real "unfiled" root list used. */
+const DEFAULT_KEY = "__default__";
+
+/** The backend already returns folders `ORDER BY lower(name)`, but that
+ * only covers the initial fetch -- a freshly created folder was appended to
+ * the end of the array client-side, and a rename didn't re-sort in place,
+ * so the visible order drifted after any edit. Re-sorting here (locale-
+ * aware, via `localeCompare` -- generally more correct than SQL's `lower()`
+ * across languages) after every state update that can change a name or add
+ * a row is what actually keeps it alphabetical, not just "alphabetical
+ * until you touch it." */
+function sortFolders(folders: NoteFolder[]): NoteFolder[] {
+  return [...folders].sort((a, b) => a.name.localeCompare(b.name));
+}
 
 /** A real two-level folder browser for Notes: folders as expandable
  * containers (▾/▸ + a folder icon, hover-reveal rename/delete, same shape
- * as PageTree's page rows), each lazily loaded on first expand, with
- * unfiled notes at root depth as siblings of the folder rows.
+ * as PageTree's page rows), each lazily loaded on first expand.
  *
- * Note creation is a *single* entry point ("+ New note", bottom-of-list --
- * same placement and the same understated text-link styling as "+ New
- * space"/"+ New page" elsewhere in this Navigator, not one scattered under
- * every folder, and not a bigger/differently-styled button). A new note is
- * always created unfiled and immediately opened, where NoteThread's own
- * folder selector files it if the user wants it in a folder. Every folder
- * having its own inline composer was tried first and made the tree read as
- * cluttered and inconsistent (a real complaint, not a hypothetical one) --
- * one clear place to create, one clear place to file, is a smaller surface
- * and a clearer mental model.
+ * Every note lives inside a folder row -- there is no bare root-level note
+ * list anymore. A note filed nowhere else lives in the always-present
+ * virtual "Default" folder (`DEFAULT_KEY`, pinned first, no rename/delete
+ * since it has no real `note_folders` row behind it) rather than sitting
+ * loose at the tree's root the way an earlier version did -- that read as
+ * genuinely messier (an implicit "everything else" bucket with no visible
+ * home) than one more always-visible folder row. "+ Add note" follows from
+ * this directly: since every note is created *into* some folder (Default
+ * included), the action lives inside whichever folder row you're looking
+ * at, not as a single global button that has to silently pick a target.
+ * "+ Add folder" is the one tree-level (not per-folder) action, so it sits
+ * at the very top, ahead of the folder list, not mixed in among per-folder
+ * actions at the bottom.
  *
- * Each folder (and the root/unfiled level) keeps its own paginated note
- * list -- notes are paginated (unlike Pages), so "Load more" is scoped to
- * whichever section it's rendered under, not shared.
+ * Each folder keeps its own paginated note list -- notes are paginated
+ * (unlike Pages), so "Load more" is scoped to whichever folder it's
+ * rendered under, not shared.
  *
  * A note's folder change (via NoteThread) is applied here by a full local
  * resync (refetch the folder list + every currently-loaded section) rather
@@ -82,7 +97,7 @@ export default function NoteTree() {
   const [foldersError, setFoldersError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
-  // Keyed by folder id, or ROOT_KEY for unfiled/root notes.
+  // Keyed by folder id, or DEFAULT_KEY for the virtual Default folder.
   const [notesByKey, setNotesByKey] = useState<Record<string, Note[]>>({});
   const [hasMoreByKey, setHasMoreByKey] = useState<Record<string, boolean>>({});
   const [loadingKeys, setLoadingKeys] = useState<Set<string>>(new Set());
@@ -98,7 +113,10 @@ export default function NoteTree() {
 
   const [deletingFolder, setDeletingFolder] = useState<NoteFolder | null>(null);
 
-  const [composing, setComposing] = useState(false);
+  // Which key (a real folder id, or DEFAULT_KEY) is currently showing the
+  // inline note composer, if any -- only one at a time, mirrors PageTree's
+  // `creatingUnder`.
+  const [composingUnder, setComposingUnder] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState("");
   const [newBody, setNewBody] = useState("");
   const [newVisibility, setNewVisibility] = useState<Visibility>("private");
@@ -108,7 +126,7 @@ export default function NoteTree() {
   const notesByKeyRef = useRef<Record<string, Note[]>>({});
 
   function folderOpts(key: string): { folderId?: string; unfiled?: boolean } {
-    return key === ROOT_KEY ? { unfiled: true } : { folderId: key };
+    return key === DEFAULT_KEY ? { unfiled: true } : { folderId: key };
   }
 
   /** `offset`/`limit`/`append` fully determine the fetch -- a first load is
@@ -153,14 +171,15 @@ export default function NoteTree() {
     if (!token || !activeTeam) return;
     try {
       const f = await listNoteFolders(token, activeTeam.id);
-      setFolders(f);
+      setFolders(sortFolders(f));
     } catch (e) {
       setFoldersError((e as Error).message);
     }
   }
 
-  /** Re-fetches everything currently loaded under `key` (root always; a
-   * folder only once expanded), preserving its loaded count. */
+  /** Re-fetches everything currently loaded under `key` (only ever true for
+   * a folder -- including Default -- that's actually been expanded),
+   * preserving its loaded count. */
   function refetchLoaded(key: string, generation: number) {
     const limit = Math.max(notesByKeyRef.current[key]?.length ?? 0, PAGE_SIZE);
     return fetchNotes(key, generation, 0, limit, false);
@@ -178,9 +197,9 @@ export default function NoteTree() {
     await Promise.all(keys.map((key) => refetchLoaded(key, generation)));
   }
 
-  // Folders + root/unfiled notes both load eagerly on team switch, exactly
-  // like PageTree eagerly loads a space's root pages -- only a folder's own
-  // contents are lazy (on first expand).
+  // Only the folder list itself loads on mount/team switch -- cheap
+  // metadata (names + counts), not note content. No folder's notes load
+  // (including Default's) until that row is actually expanded.
   useEffect(() => {
     generationRef.current += 1;
     const generation = generationRef.current;
@@ -195,23 +214,21 @@ export default function NoteTree() {
     if (!token || !activeTeam) return;
     listNoteFolders(token, activeTeam.id)
       .then((f) => {
-        if (generation === generationRef.current) setFolders(f);
+        if (generation === generationRef.current) setFolders(sortFolders(f));
       })
       .catch((e) => {
         if (generation === generationRef.current) setFoldersError(e.message);
       });
-    fetchNotes(ROOT_KEY, generation, 0, PAGE_SIZE, false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, activeTeam]);
 
-  function toggleFolder(folderId: string) {
+  function toggleFolder(key: string) {
     setExpanded((prev) => {
       const next = new Set(prev);
-      if (next.has(folderId)) {
-        next.delete(folderId);
+      if (next.has(key)) {
+        next.delete(key);
       } else {
-        next.add(folderId);
-        if (!notesByKeyRef.current[folderId]) fetchNotes(folderId, generationRef.current, 0, PAGE_SIZE, false);
+        next.add(key);
+        if (!notesByKeyRef.current[key]) fetchNotes(key, generationRef.current, 0, PAGE_SIZE, false);
       }
       return next;
     });
@@ -270,7 +287,7 @@ export default function NoteTree() {
     setFoldersError(null);
     try {
       const folder = await createNoteFolder(token, { team_id: activeTeam.id, name });
-      setFolders((prev) => [...(prev ?? []), folder]);
+      setFolders((prev) => sortFolders([...(prev ?? []), folder]));
       setCreatingFolder(false);
       setNewFolderName("");
     } catch (e) {
@@ -297,7 +314,7 @@ export default function NoteTree() {
     setFoldersError(null);
     try {
       const updated = await renameNoteFolder(token, folder.id, name);
-      setFolders((prev) => prev?.map((f) => (f.id === updated.id ? updated : f)) ?? prev);
+      setFolders((prev) => (prev ? sortFolders(prev.map((f) => (f.id === updated.id ? updated : f))) : prev));
       setRenamingId(null);
     } catch (e) {
       setFoldersError((e as Error).message);
@@ -319,29 +336,33 @@ export default function NoteTree() {
     delete next[folder.id];
     notesByKeyRef.current = next;
     setNotesByKey(next);
-    // The folder's notes are now unfiled server-side -- refetch root so
-    // they actually appear there instead of just vanishing from view.
-    refetchLoaded(ROOT_KEY, generationRef.current);
+    // The folder's notes fall back into Default server-side -- refetch it
+    // (if it's been expanded) so they actually appear there instead of
+    // just vanishing from view.
+    if (notesByKeyRef.current[DEFAULT_KEY] || expanded.has(DEFAULT_KEY)) {
+      refetchLoaded(DEFAULT_KEY, generationRef.current);
+    }
     setDeletingFolder(null);
   }
 
-  async function handleCreateNote() {
+  async function handleCreateNote(key: string) {
     if (!token || !activeTeam || !newTitle.trim() || !newBody.trim() || creatingNote) return;
     setCreatingNote(true);
     try {
-      // Always created unfiled -- NoteThread's own folder selector is the
-      // one place to file it, once it's open. See the doc comment above
-      // for why this replaced a composer-per-folder design.
       const note = await createNote(token, {
         team_id: activeTeam.id,
         visibility: newVisibility,
         title: newTitle.trim(),
         body_markdown: newBody.trim(),
+        folder_id: key === DEFAULT_KEY ? undefined : key,
       });
-      const existing = notesByKeyRef.current[ROOT_KEY] ?? [];
-      notesByKeyRef.current = { ...notesByKeyRef.current, [ROOT_KEY]: [note, ...existing] };
+      const existing = notesByKeyRef.current[key] ?? [];
+      notesByKeyRef.current = { ...notesByKeyRef.current, [key]: [note, ...existing] };
       setNotesByKey(notesByKeyRef.current);
-      setComposing(false);
+      // Filing a new note into a real folder changes that folder's
+      // note_count -- Default has no count badge to keep in sync.
+      if (key !== DEFAULT_KEY) refreshFolders();
+      setComposingUnder(null);
       setNewTitle("");
       setNewBody("");
       setNewVisibility("private");
@@ -353,23 +374,66 @@ export default function NoteTree() {
     }
   }
 
-  /** Renders one section's note rows at a flat left padding -- nesting
-   * under a folder is done by the *caller* wrapping this in an indent+guide
-   * container (see the folder-row render below), not by this function
-   * computing a depth-scaled padding itself. An earlier version tried
-   * depth-scaled padding alone and a folder's own label (past its chevron
-   * and icon) ended up starting to the *right* of its children's text --
-   * indentation that doesn't actually read as nesting. A visible left
-   * guide (mirroring ReplyItem's `pl-4 border-l-2` thread indent) is what
-   * makes "inside this folder" unambiguous at a glance. */
-  function renderNotes(key: string) {
+  function renderComposer(key: string) {
+    if (composingUnder !== key) return null;
+    return (
+      <div className="space-y-2 px-2 py-2">
+        <input
+          autoFocus
+          value={newTitle}
+          onChange={(e) => setNewTitle(e.target.value)}
+          placeholder={tNotes("titlePlaceholder")}
+          disabled={creatingNote}
+          className="w-full text-sm rounded border border-slate-200 px-2 py-1 focus:border-rose-400 focus:outline-none focus:ring-1 focus:ring-rose-400"
+        />
+        <select
+          value={newVisibility}
+          onChange={(e) => setNewVisibility(e.target.value as Visibility)}
+          disabled={creatingNote}
+          className="text-xs rounded border border-slate-200 px-1.5 py-1"
+        >
+          <option value="private">{tNotes("visibility.private")}</option>
+          <option value="team">{tNotes("visibility.team")}</option>
+          <option value="organization">{tNotes("visibility.organization")}</option>
+        </select>
+        <MarkdownComposer value={newBody} onChange={setNewBody} disabled={creatingNote} rows={4} />
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setComposingUnder(null);
+              setNewTitle("");
+              setNewBody("");
+            }}
+            className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1"
+          >
+            {tNotes("cancel")}
+          </button>
+          <button
+            type="button"
+            onClick={() => handleCreateNote(key)}
+            disabled={creatingNote || !newTitle.trim() || !newBody.trim()}
+            className="text-xs bg-rose-700 hover:bg-rose-800 disabled:opacity-50 text-white px-3 py-1 rounded"
+          >
+            {creatingNote ? tNotes("saving") : tNotes("save")}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  /** Renders one folder's note rows plus its own "+ Add note" affordance --
+   * nesting under the folder row is done by the *caller* wrapping this in
+   * an indent+guide container, not by this function computing a depth-scaled
+   * padding itself (see the folder-row render below for why: a folder's own
+   * label, past its chevron and icon, previously ended up starting to the
+   * *right* of its children's text when indentation was padding-only). */
+  function renderFolderContents(key: string) {
     const notes = notesByKey[key];
-    if (!notes) {
-      return loadingKeys.has(key) ? <p className="text-xs text-slate-400 px-2 py-1">…</p> : null;
-    }
     return (
       <>
-        {notes.map((note) => {
+        {!notes && (loadingKeys.has(key) ? <p className="text-xs text-slate-400 px-2 py-1">…</p> : null)}
+        {notes?.map((note) => {
           const isSelected = selectedNoteId === note.id;
           return (
             <Link
@@ -384,7 +448,10 @@ export default function NoteTree() {
             </Link>
           );
         })}
-        {loadingKeys.has(key) && notes.length > 0 && <p className="text-xs text-slate-400 px-2 py-1">{t("loading")}</p>}
+        {notes?.length === 0 && <p className="text-xs text-slate-400 px-2 py-1">{t("noNotes")}</p>}
+        {loadingKeys.has(key) && notes && notes.length > 0 && (
+          <p className="text-xs text-slate-400 px-2 py-1">{t("loading")}</p>
+        )}
         {hasMoreByKey[key] && !loadingKeys.has(key) && (
           <button
             type="button"
@@ -394,7 +461,66 @@ export default function NoteTree() {
             {t("loadMore")}
           </button>
         )}
+        {renderComposer(key)}
+        {composingUnder !== key && (
+          <button
+            type="button"
+            onClick={() => setComposingUnder(key)}
+            className="block px-2 py-1 text-xs font-medium text-rose-700 hover:underline"
+          >
+            + {t("newNote")}
+          </button>
+        )}
       </>
+    );
+  }
+
+  function renderFolderRow(id: string, name: string, noteCount: number | null, folder: NoteFolder | null) {
+    const isExpanded = expanded.has(id);
+    if (renamingId === id && folder) {
+      return (
+        <div key={id} className="px-2 py-1">
+          <input
+            autoFocus
+            value={renameDraft}
+            onChange={(e) => setRenameDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleRename(folder);
+              if (e.key === "Escape") setRenamingId(null);
+            }}
+            onBlur={() => handleRename(folder)}
+            disabled={renaming}
+            className="w-full text-sm rounded border border-slate-200 px-1.5 py-0.5 focus:border-rose-400 focus:outline-none"
+          />
+        </div>
+      );
+    }
+    return (
+      <div key={id}>
+        <div className="group flex items-center gap-1 rounded px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-100">
+          <button
+            type="button"
+            onClick={() => toggleFolder(id)}
+            className="flex flex-1 min-w-0 items-center gap-1.5 text-left font-medium"
+          >
+            <span className="shrink-0 w-3 text-xs text-slate-400">{isExpanded ? "▾" : "▸"}</span>
+            <span className="shrink-0 text-slate-400">{isExpanded ? folderOpenIcon : folderIcon}</span>
+            <span className="truncate">{name}</span>
+            {noteCount !== null && <span className="shrink-0 text-xs text-slate-400">{noteCount}</span>}
+          </button>
+          {folder && (
+            <>
+              <IconButton title={t("renameFolder")} onClick={() => startRename(folder)}>
+                <span className="opacity-0 group-hover:opacity-100">{editIcon}</span>
+              </IconButton>
+              <IconButton title={t("deleteFolder")} onClick={() => setDeletingFolder(folder)} danger>
+                <span className="opacity-0 group-hover:opacity-100">{deleteIcon}</span>
+              </IconButton>
+            </>
+          )}
+        </div>
+        {isExpanded && <div className="ml-4 border-l-2 border-slate-200 pl-2">{renderFolderContents(id)}</div>}
+      </div>
     );
   }
 
@@ -404,117 +530,10 @@ export default function NoteTree() {
     <div>
       {foldersError && <p className="px-2 py-1 text-xs text-red-600">{foldersError}</p>}
       {notesError && <p className="px-2 py-1 text-xs text-red-600">{notesError}</p>}
-      {!folders && !foldersError && <p className="px-2 py-1 text-xs text-slate-400">{t("loading")}</p>}
 
-      {folders?.map((folder) =>
-        renamingId === folder.id ? (
-          <div key={folder.id} className="px-2 py-1">
-            <input
-              autoFocus
-              value={renameDraft}
-              onChange={(e) => setRenameDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleRename(folder);
-                if (e.key === "Escape") setRenamingId(null);
-              }}
-              onBlur={() => handleRename(folder)}
-              disabled={renaming}
-              className="w-full text-sm rounded border border-slate-200 px-1.5 py-0.5 focus:border-rose-400 focus:outline-none"
-            />
-          </div>
-        ) : (
-          <div key={folder.id}>
-            <div className="group flex items-center gap-1 rounded px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-100">
-              <button
-                type="button"
-                onClick={() => toggleFolder(folder.id)}
-                className="flex flex-1 min-w-0 items-center gap-1.5 text-left font-medium"
-              >
-                <span className="shrink-0 w-3 text-xs text-slate-400">{expanded.has(folder.id) ? "▾" : "▸"}</span>
-                <span className="shrink-0 text-slate-400">{expanded.has(folder.id) ? folderOpenIcon : folderIcon}</span>
-                <span className="truncate">{folder.name}</span>
-                <span className="shrink-0 text-xs text-slate-400">{folder.note_count}</span>
-              </button>
-              <IconButton title={t("renameFolder")} onClick={() => startRename(folder)}>
-                <span className="opacity-0 group-hover:opacity-100">{editIcon}</span>
-              </IconButton>
-              <IconButton title={t("deleteFolder")} onClick={() => setDeletingFolder(folder)} danger>
-                <span className="opacity-0 group-hover:opacity-100">{deleteIcon}</span>
-              </IconButton>
-            </div>
-            {expanded.has(folder.id) && (
-              <div className="ml-4 border-l-2 border-slate-200 pl-2">{renderNotes(folder.id)}</div>
-            )}
-          </div>
-        )
-      )}
-
-      {/* Unfiled notes: root depth, no synthetic "Unfiled" folder row --
-          same shape as PageTree's root pages. */}
-      {renderNotes(ROOT_KEY)}
-
-      {/* Create actions, bottom-of-list -- same placement and exact same
-          understated text-link style as "+ New space"/"+ New page"
-          elsewhere in this Navigator (small, no icon, no background,
-          underline-on-hover only). An earlier version put "+ New note" at
-          the *top*, styled as a bigger icon-and-background button -- both
-          a placement and a sizing inconsistency with every other create
-          action in this sidebar, which is what read as "ugly" and
-          "confusing." */}
-      {composing && (
-        <div className="space-y-2 px-2 py-2">
-          <input
-            autoFocus
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-            placeholder={tNotes("titlePlaceholder")}
-            disabled={creatingNote}
-            className="w-full text-sm rounded border border-slate-200 px-2 py-1 focus:border-rose-400 focus:outline-none focus:ring-1 focus:ring-rose-400"
-          />
-          <select
-            value={newVisibility}
-            onChange={(e) => setNewVisibility(e.target.value as Visibility)}
-            disabled={creatingNote}
-            className="text-xs rounded border border-slate-200 px-1.5 py-1"
-          >
-            <option value="private">{tNotes("visibility.private")}</option>
-            <option value="team">{tNotes("visibility.team")}</option>
-            <option value="organization">{tNotes("visibility.organization")}</option>
-          </select>
-          <MarkdownComposer value={newBody} onChange={setNewBody} disabled={creatingNote} rows={4} />
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setComposing(false);
-                setNewTitle("");
-                setNewBody("");
-              }}
-              className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1"
-            >
-              {tNotes("cancel")}
-            </button>
-            <button
-              type="button"
-              onClick={handleCreateNote}
-              disabled={creatingNote || !newTitle.trim() || !newBody.trim()}
-              className="text-xs bg-rose-700 hover:bg-rose-800 disabled:opacity-50 text-white px-3 py-1 rounded"
-            >
-              {creatingNote ? tNotes("saving") : tNotes("save")}
-            </button>
-          </div>
-        </div>
-      )}
-      {!composing && (
-        <button
-          type="button"
-          onClick={() => setComposing(true)}
-          className="w-full text-left px-2.5 py-1 text-xs font-medium text-rose-700 hover:underline"
-        >
-          + {t("newNote")}
-        </button>
-      )}
-
+      {/* The one tree-level (not per-folder) create action -- pinned at the
+          very top, ahead of the folder list, so it doesn't read as one more
+          item mixed in among per-folder actions further down. */}
       {creatingFolder ? (
         <div className="px-2 py-1">
           <input
@@ -545,6 +564,14 @@ export default function NoteTree() {
           + {t("newFolder")}
         </button>
       )}
+
+      {/* Default is always here, pinned first, before any real folders --
+          every note lives in some folder, this is where one lands with no
+          explicit choice made. */}
+      {renderFolderRow(DEFAULT_KEY, t("defaultFolder"), null, null)}
+
+      {!folders && !foldersError && <p className="px-2 py-1 text-xs text-slate-400">{t("loading")}</p>}
+      {folders?.map((folder) => renderFolderRow(folder.id, folder.name, folder.note_count, folder))}
 
       {deletingFolder && (
         <DeleteNoteFolderModal
