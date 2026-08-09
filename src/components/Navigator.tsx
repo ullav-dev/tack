@@ -122,9 +122,8 @@ export default function Navigator() {
 
   // Cheap metadata (names only, not note content), fetched once per team so
   // a note hit's folder badge can show a real name instead of a raw id.
-  // Only ever covers the *active* team's folders -- a hit belonging to a
-  // different team (search itself isn't team-scoped) just shows without a
-  // folder badge rather than a wrong or unresolved one.
+  // Search results are now scoped to this same active team server-side, so
+  // every note hit's folder_id (if any) always resolves against this list.
   const [searchFolders, setSearchFolders] = useState<NoteFolder[]>([]);
   useEffect(() => {
     if (!token || !activeTeam) {
@@ -160,9 +159,9 @@ export default function Navigator() {
   }, [token]);
 
   async function runSearch(q: string, atNotesPage: number, atPagesPage: number, generation: number) {
-    if (!token) return;
+    if (!token || !activeTeam) return;
     try {
-      const results = await search(token, q, {
+      const results = await search(token, q, activeTeam.id, {
         notesLimit: SEARCH_PAGE_SIZE,
         notesOffset: (atNotesPage - 1) * SEARCH_PAGE_SIZE,
         pagesLimit: SEARCH_PAGE_SIZE,
@@ -178,11 +177,16 @@ export default function Navigator() {
     }
   }
 
+  // Re-runs on `activeTeam` too, not just `query` -- search is now scoped
+  // server-side to one team (tack-server's own fix: a hit from a different
+  // team used to surface with no indication why). Switching teams with an
+  // active query has to re-fetch against the new team, not just leave the
+  // previous team's stale results on screen.
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
     const trimmed = query.trim();
-    if (!trimmed || !token) {
+    if (!trimmed || !token || !activeTeam) {
       setSearchResults(null);
       setSearching(false);
       setSearchError(null);
@@ -205,7 +209,7 @@ export default function Navigator() {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, token]);
+  }, [query, token, activeTeam]);
 
   function handleNotesPageChange(page: number) {
     setNotesPage(page);
@@ -312,8 +316,9 @@ export default function Navigator() {
       <div className="flex-1 overflow-y-auto min-h-0">
         {query.trim() ? (
           <div className="py-2">
-            {searchError && <p className="px-3 py-1 text-xs text-red-600">{searchError}</p>}
-            {searching && <p className="px-3 py-1 text-xs text-slate-400">{t("searching")}</p>}
+            {!activeTeam && <p className="px-3 py-1 text-xs text-slate-400">{t("selectTeamFirst")}</p>}
+            {activeTeam && searchError && <p className="px-3 py-1 text-xs text-red-600">{searchError}</p>}
+            {activeTeam && searching && <p className="px-3 py-1 text-xs text-slate-400">{t("searching")}</p>}
             {!searching && searchResults && searchResults.notes.total === 0 && searchResults.pages.total === 0 && (
               <p className="px-3 py-1 text-xs text-slate-400">{t("noResults")}</p>
             )}
