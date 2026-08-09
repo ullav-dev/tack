@@ -40,6 +40,8 @@ Spaces and Pages get the same "+ Add" placement (top-of-list) and hover-reveal r
 
 `TeamAvatar` renders a team's `avatar_url` as a plain HTTPS image (unlike togra's `TeamAvatar`, which resolves Comad DAM asset thumbnails through an authenticated proxy) — Tack has no DAM proxy yet, so that richer behaviour is deferred until DAM integration lands alongside the Notes/Pages content features.
 
+Search (Navigator's search box, backed by `tack-server`'s hybrid `GET /search`) is grouped by content type — Notes / Pages, each its own paginated section (`Pager.tsx`) — not a single flat, unlabeled list. A hit shows its real title, a highlighted matched snippet (OpenSearch's own `<em>` fragments, parsed and rendered as a `<mark>` rather than trusted as raw HTML via `dangerouslySetInnerHTML`), and a folder badge when a note hit is filed (resolved client-side against the active team's own folder list — a hit from a different team just shows without a badge, since search itself isn't team-scoped). A reply hit links to its parent thread (`/notes/{parent_id}`), not itself, and shows "In a reply" in place of its own (always-empty) title.
+
 ## Branch Policy
 
 Feature branches merge to `main` via PR; do not commit directly to `main`.
