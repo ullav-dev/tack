@@ -12,7 +12,7 @@ import { NoteEventsProvider } from "@/contexts/NoteEventsContext";
  * this route group is free to use the full browser width.
  *
  * `PageEventsProvider`/`NoteEventsProvider` let PageEditor/NoteThread (right
- * pane) tell PageTree/NotesList (left pane, inside Navigator) about metadata
+ * pane) tell PageTree/NoteTree (left pane, inside Navigator) about metadata
  * changes like a title edit — they're siblings with no other shared state. */
 export default function WorkspaceLayout({ children }: { children: React.ReactNode }) {
   return (
