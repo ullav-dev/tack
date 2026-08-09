@@ -24,6 +24,7 @@ import Pager from "@/components/Pager";
 import { IconButton, editIcon, folderIcon, folderOpenIcon, noteIcon, pageIcon } from "@/components/Icon";
 
 const SEARCH_DEBOUNCE_MS = 300;
+const SPACES_PAGE_SIZE = 25;
 const SEARCH_PAGE_SIZE = 10;
 
 /** Splits an OpenSearch highlight fragment on its own `<em>`/`</em>`
@@ -52,12 +53,16 @@ function renderHighlight(fragment: string): React.ReactNode {
   return nodes;
 }
 
-/** The backend returns spaces `ORDER BY lower(name)`, but a freshly created
- * space was appended to the end of the array client-side, drifting out of
- * alphabetical order -- same fix, same rationale as NoteTree's
- * `sortFolders`. */
+/** The backend returns one page of spaces `ORDER BY lower(name)`, but that
+ * only covers the fetched page -- a freshly created or renamed space needs
+ * the same client-side re-sort (it can land wherever on the currently shown
+ * page), same rationale as NoteTree's `sortFolders`. */
 function sortSpaces(spaces: Space[]): Space[] {
   return [...spaces].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function totalPages(total: number): number {
+  return Math.max(1, Math.ceil(total / SPACES_PAGE_SIZE));
 }
 
 type NavigatorTab = "notes" | "spaces";
@@ -96,6 +101,8 @@ export default function Navigator() {
   const [activeTab, setActiveTabState] = useState<NavigatorTab>(loadStoredTab);
 
   const [spaces, setSpaces] = useState<Space[] | null>(null);
+  const [spacesTotal, setSpacesTotal] = useState(0);
+  const [spacesPage, setSpacesPage] = useState(1);
   const [spacesError, setSpacesError] = useState<string | null>(null);
   const [expandedSpaces, setExpandedSpaces] = useState<Set<string>>(new Set());
   const [creatingSpace, setCreatingSpace] = useState(false);
@@ -112,8 +119,6 @@ export default function Navigator() {
   const [pagesPage, setPagesPage] = useState(1);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const searchGenerationRef = useRef(0);
 
   // Cheap metadata (names only, not note content), fetched once per team so
   // a note hit's folder badge can show a real name instead of a raw id.
@@ -126,26 +131,32 @@ export default function Navigator() {
       setSearchFolders([]);
       return;
     }
-    listNoteFolders(token, activeTeam.id)
-      .then((folders) => setSearchFolders(folders))
+    listNoteFolders(token, activeTeam.id, { limit: 100 })
+      .then((result) => setSearchFolders(result.folders))
       .catch(() => {
         /* Non-fatal: folder badges just won't resolve a name. */
       });
   }, [token, activeTeam]);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchGenerationRef = useRef(0);
+
+  async function fetchSpaces(page: number) {
+    if (!token) return;
+    try {
+      const result = await listSpaces(token, { limit: SPACES_PAGE_SIZE, offset: (page - 1) * SPACES_PAGE_SIZE });
+      setSpaces(sortSpaces(result.spaces));
+      setSpacesTotal(result.total);
+      setSpacesPage(page);
+      setSpacesError(null);
+    } catch (e) {
+      setSpacesError((e as Error).message);
+    }
+  }
 
   useEffect(() => {
     if (!token) return;
-    let cancelled = false;
-    listSpaces(token)
-      .then((s) => {
-        if (!cancelled) setSpaces(sortSpaces(s));
-      })
-      .catch((e) => {
-        if (!cancelled) setSpacesError(e.message);
-      });
-    return () => {
-      cancelled = true;
-    };
+    fetchSpaces(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   async function runSearch(q: string, atNotesPage: number, atPagesPage: number, generation: number) {
@@ -233,7 +244,10 @@ export default function Navigator() {
     setCreateSpaceError(null);
     try {
       const space = await createSpace(token, { team_id: activeTeam.id, name });
-      setSpaces((prev) => sortSpaces([...(prev ?? []), space]));
+      // A new space can land on any page alphabetically -- jump to page 1
+      // and refetch rather than guessing whether it belongs on the page
+      // currently shown.
+      await fetchSpaces(1);
       setExpandedSpaces((prev) => new Set(prev).add(space.id));
       setCreatingSpace(false);
       setNewSpaceName("");
@@ -261,8 +275,10 @@ export default function Navigator() {
     setRenamingSpace(true);
     setSpacesError(null);
     try {
-      const updated = await renameSpace(token, space.id, name);
-      setSpaces((prev) => (prev ? sortSpaces(prev.map((s) => (s.id === updated.id ? updated : s))) : prev));
+      await renameSpace(token, space.id, name);
+      // Same reasoning as create: a rename can move a space to a different
+      // page -- refetch the current page rather than patching in place.
+      await fetchSpaces(spacesPage);
       setRenamingSpaceId(null);
     } catch (e) {
       setSpacesError((e as Error).message);
@@ -313,10 +329,17 @@ export default function Navigator() {
                 {searchResults.notes.hits.map((hit) => (
                   <SearchResultRow key={hit.content_id} hit={hit} folders={searchFolders} />
                 ))}
-                <Pager page={notesPage} totalPages={Math.ceil(searchResults.notes.total / SEARCH_PAGE_SIZE)} onChange={handleNotesPageChange} disabled={searching} />
+                <Pager
+                  page={notesPage}
+                  totalPages={Math.ceil(searchResults.notes.total / SEARCH_PAGE_SIZE)}
+                  onChange={handleNotesPageChange}
+                  disabled={searching}
+                />
 
                 <div className="px-3 pt-3 pb-1 flex items-baseline gap-1.5">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t("searchPagesSection")}</span>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    {t("searchPagesSection")}
+                  </span>
                   <span className="text-xs text-slate-400">({searchResults.pages.total})</span>
                 </div>
                 {searchResults.pages.hits.length === 0 && (
@@ -325,7 +348,12 @@ export default function Navigator() {
                 {searchResults.pages.hits.map((hit) => (
                   <SearchResultRow key={hit.content_id} hit={hit} folders={searchFolders} />
                 ))}
-                <Pager page={pagesPage} totalPages={Math.ceil(searchResults.pages.total / SEARCH_PAGE_SIZE)} onChange={handlePagesPageChange} disabled={searching} />
+                <Pager
+                  page={pagesPage}
+                  totalPages={Math.ceil(searchResults.pages.total / SEARCH_PAGE_SIZE)}
+                  onChange={handlePagesPageChange}
+                  disabled={searching}
+                />
               </>
             )}
           </div>
@@ -423,6 +451,7 @@ export default function Navigator() {
                 </div>
               )
             )}
+            <Pager page={spacesPage} totalPages={totalPages(spacesTotal)} onChange={fetchSpaces} />
           </div>
         )}
       </div>

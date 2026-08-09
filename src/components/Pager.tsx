@@ -15,10 +15,10 @@ interface Props {
  * list panel, not the wider ellipsis-windowed numbered-button pattern
  * `clann-webapp/family/page.tsx` uses (built for a wide main-content table,
  * not a ~300px sidebar). Shared by NoteTree, PageTree, and Navigator's
- * Spaces list and search results -- the one piece of UI all of them need
- * identically, so it's a real component instead of copies of the same
- * JSX. Renders nothing when there's only one page, so an unpaginated-in-
- * practice list doesn't grow a dead control. */
+ * Spaces list -- the one piece of UI all three needed identically, so it's
+ * a real component instead of three copies of the same JSX. Renders
+ * nothing when there's only one page, so an unpaginated-in-practice list
+ * doesn't grow a dead control. */
 export default function Pager({ page, totalPages, onChange, disabled }: Props) {
   const t = useTranslations("navigator");
   if (totalPages <= 1) return null;
