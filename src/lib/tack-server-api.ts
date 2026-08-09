@@ -37,7 +37,18 @@ export interface Space {
   updated_at: string;
 }
 
-export const listSpaces = (token: string): Promise<Space[]> => apiRequest("/spaces", token);
+export interface SpacesPage {
+  spaces: Space[];
+  total: number;
+}
+
+export const listSpaces = (token: string, opts: { limit?: number; offset?: number } = {}): Promise<SpacesPage> => {
+  const params = new URLSearchParams();
+  if (opts.limit !== undefined) params.set("limit", String(opts.limit));
+  if (opts.offset !== undefined) params.set("offset", String(opts.offset));
+  const qs = params.toString();
+  return apiRequest(`/spaces${qs ? `?${qs}` : ""}`, token);
+};
 
 export const createSpace = (token: string, payload: { team_id: string; name: string }): Promise<Space> =>
   apiRequest("/spaces", token, { method: "POST", body: JSON.stringify(payload) });
@@ -64,8 +75,24 @@ export interface Page {
 
 export type PermissionLevel = "view" | "edit";
 
-export const listPages = (token: string, spaceId: string, parentId?: string): Promise<Page[]> =>
-  apiRequest(`/spaces/${spaceId}/pages${parentId ? `?parent_id=${parentId}` : ""}`, token);
+export interface PagesPage {
+  pages: Page[];
+  total: number;
+}
+
+export const listPages = (
+  token: string,
+  spaceId: string,
+  parentId?: string,
+  opts: { limit?: number; offset?: number } = {}
+): Promise<PagesPage> => {
+  const params = new URLSearchParams();
+  if (parentId) params.set("parent_id", parentId);
+  if (opts.limit !== undefined) params.set("limit", String(opts.limit));
+  if (opts.offset !== undefined) params.set("offset", String(opts.offset));
+  const qs = params.toString();
+  return apiRequest(`/spaces/${spaceId}/pages${qs ? `?${qs}` : ""}`, token);
+};
 
 export const getPage = (token: string, id: string): Promise<Page> => apiRequest(`/pages/${id}`, token);
 
@@ -189,6 +216,9 @@ export interface Note {
 export interface NotesPage {
   notes: Note[];
   has_more: boolean;
+  /** Total notes matching the query, ignoring limit/offset -- lets the UI
+   * render "Page N of M". */
+  total: number;
 }
 
 export interface NoteRevision {
@@ -261,9 +291,22 @@ export interface NoteFolder {
   note_count: number;
 }
 
-export const listNoteFolders = (token: string, teamId?: string): Promise<NoteFolder[]> => {
-  const params = teamId ? `?team_id=${teamId}` : "";
-  return apiRequest(`/note-folders${params}`, token);
+export interface NoteFoldersPage {
+  folders: NoteFolder[];
+  total: number;
+}
+
+export const listNoteFolders = (
+  token: string,
+  teamId?: string,
+  opts: { limit?: number; offset?: number } = {}
+): Promise<NoteFoldersPage> => {
+  const params = new URLSearchParams();
+  if (teamId) params.set("team_id", teamId);
+  if (opts.limit !== undefined) params.set("limit", String(opts.limit));
+  if (opts.offset !== undefined) params.set("offset", String(opts.offset));
+  const qs = params.toString();
+  return apiRequest(`/note-folders${qs ? `?${qs}` : ""}`, token);
 };
 
 export const createNoteFolder = (token: string, payload: { team_id: string; name: string }): Promise<NoteFolder> =>

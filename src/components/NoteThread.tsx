@@ -233,9 +233,14 @@ export default function NoteThread({ noteId }: Props) {
       return;
     }
     let cancelled = false;
-    listNoteFolders(token, note.team_id)
-      .then((f) => {
-        if (!cancelled) setFolders(f);
+    // This selector needs the *whole* list to choose from, not one browsable
+    // page -- 100 is GET /note-folders' own max limit, so this is "as many
+    // as the API will ever return in one call," not an arbitrary cap chosen
+    // here. A team with more folders than that is a case for a searchable
+    // picker, not this plain <select>; out of scope for this pass.
+    listNoteFolders(token, note.team_id, { limit: 100 })
+      .then((result) => {
+        if (!cancelled) setFolders(result.folders);
       })
       .catch(() => {
         /* Non-fatal: the folder selector just won't offer choices. */
