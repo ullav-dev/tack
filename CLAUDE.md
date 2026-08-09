@@ -38,6 +38,8 @@ Notes support flat, per-team folders via `NoteTree` (a real two-level tree, stru
 
 Spaces and Pages get the same "+ Add" placement (top-of-list) and hover-reveal rename affordance as Notes folders — a Space or Page's title can be renamed directly from the tree (`PATCH /spaces/:id`, `PATCH /pages/:id`), not just from inside `PageEditor`. Folder/space/page lists are re-sorted client-side after every create/rename (`sortFolders`/`sortSpaces`/`sortPages`), on top of the backend's own case-insensitive `ORDER BY lower(name)` — the backend sort alone only covers the initial fetch, not a list that's since been edited.
 
+Every list that could grow large — a folder's notes, the Notes folder list itself, the Spaces list, a Page level's children — is real server-side pagination (`limit`/`offset`/`total`, `Pager.tsx`: prev/next + "Page N of M", shared across `NoteTree`/`PageTree`/`Navigator`), not a "Load more" that grows the DOM forever, and not skipped on the folder/space lists just because those counts are usually small — the standing rule here is "who knows the use cases; build every list scale-safe by default," not a case-by-case guess. Nothing loads eagerly either: `NoteTree` fetches only the folder list on mount (cheap metadata, not note content); a folder's own notes (including the always-present virtual "Default" folder's) load only once that row is expanded. `PageTree` already worked this way.
+
 `TeamAvatar` renders a team's `avatar_url` as a plain HTTPS image (unlike togra's `TeamAvatar`, which resolves Comad DAM asset thumbnails through an authenticated proxy) — Tack has no DAM proxy yet, so that richer behaviour is deferred until DAM integration lands alongside the Notes/Pages content features.
 
 ## Branch Policy

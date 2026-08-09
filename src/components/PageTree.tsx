@@ -7,22 +7,29 @@ import { Link, useRouter } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePageEvents } from "@/contexts/PageEventsContext";
 import { createPage, listPages, updatePage, type Page } from "@/lib/tack-server-api";
+import Pager from "@/components/Pager";
 import { IconButton, editIcon, pageIcon, plusIcon } from "@/components/Icon";
 
 interface Props {
   spaceId: string;
 }
 
+const PAGE_SIZE = 25;
+
 /** Sentinel key for the space's root pages (parent_id IS NULL) — mirrors
  * lagan's RepoTreePanel using `""` for a git tree's root directory. */
 const ROOT_KEY = "";
 
-/** The backend returns a level's pages `ORDER BY lower(title)`, but a
- * freshly created page was appended to the end of its parent's array
- * client-side, and a title edit didn't re-sort in place -- same fix, same
- * rationale as NoteTree's `sortFolders`/Navigator's `sortSpaces`. */
+/** The backend returns one page of a level's pages `ORDER BY lower(title)`,
+ * but that only covers the fetched page -- a freshly created or renamed
+ * page needs the same client-side re-sort (it can land wherever on the
+ * currently shown page), same rationale as NoteTree's `sortFolders`. */
 function sortPages(pages: Page[]): Page[] {
   return [...pages].sort((a, b) => a.title.localeCompare(b.title));
+}
+
+function totalPages(total: number): number {
+  return Math.max(1, Math.ceil(total / PAGE_SIZE));
 }
 
 /** Lazy-loaded hierarchical Page tree for one space — directly mirrors
@@ -39,6 +46,12 @@ function sortPages(pages: Page[]): Page[] {
  * children -- a page is real content in its own right, unlike a Space or a
  * Notes folder, which are pure containers and get a folder icon instead.
  *
+ * Each level is a real, server-paginated page (`Pager`), same as NoteTree's
+ * folder contents and Navigator's Spaces list -- not skipped here just
+ * because a single parent's direct-children count is usually small ("who
+ * knows the use cases... if a lot it is needed," the standing rule for
+ * every list in this app).
+ *
  * Unlike RepoTreePanel, there's no "expand ancestors of the currently open
  * item" effect here — a page's materialized `path` would let this be done,
  * but doing it well needs decoding that path against the tree's own
@@ -54,6 +67,8 @@ export default function PageTree({ spaceId }: Props) {
   const selectedPageId = params.pageId;
 
   const [children, setChildren] = useState<Record<string, Page[]>>({});
+  const [totalByKey, setTotalByKey] = useState<Record<string, number>>({});
+  const [pageByKey, setPageByKey] = useState<Record<string, number>>({});
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
@@ -85,15 +100,22 @@ export default function PageTree({ spaceId }: Props) {
   // Mirrors `children` synchronously so `load`'s cache check can't read a
   // render-stale snapshot within the same effect batch that just reset it.
   const childrenRef = useRef<Record<string, Page[]>>({});
+  const pageByKeyRef = useRef<Record<string, number>>({});
 
-  async function fetchChildren(parentId: string, generation: number) {
+  async function fetchChildren(parentId: string, generation: number, page: number) {
     if (!token) return;
     setLoading((prev) => new Set(prev).add(parentId));
     try {
-      const pages = await listPages(token, spaceId, parentId || undefined);
+      const result = await listPages(token, spaceId, parentId || undefined, {
+        limit: PAGE_SIZE,
+        offset: (page - 1) * PAGE_SIZE,
+      });
       if (generation !== generationRef.current) return;
-      childrenRef.current = { ...childrenRef.current, [parentId]: pages };
+      childrenRef.current = { ...childrenRef.current, [parentId]: result.pages };
+      pageByKeyRef.current = { ...pageByKeyRef.current, [parentId]: page };
       setChildren(childrenRef.current);
+      setPageByKey(pageByKeyRef.current);
+      setTotalByKey((prev) => ({ ...prev, [parentId]: result.total }));
     } catch (e) {
       if (generation === generationRef.current) setError((e as Error).message);
     } finally {
@@ -109,17 +131,20 @@ export default function PageTree({ spaceId }: Props) {
 
   function load(parentId: string) {
     if (childrenRef.current[parentId] || loading.has(parentId)) return;
-    fetchChildren(parentId, generationRef.current);
+    fetchChildren(parentId, generationRef.current, 1);
   }
 
   useEffect(() => {
     generationRef.current += 1;
     childrenRef.current = {};
+    pageByKeyRef.current = {};
     setChildren({});
+    setTotalByKey({});
+    setPageByKey({});
     setExpanded(new Set());
     setLoading(new Set());
     setError(null);
-    fetchChildren(ROOT_KEY, generationRef.current);
+    fetchChildren(ROOT_KEY, generationRef.current, 1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, spaceId]);
 
@@ -144,15 +169,24 @@ export default function PageTree({ spaceId }: Props) {
   // PageEditor also broadcasts when the page itself was deleted (only ever
   // a leaf -- delete is blocked client-side while child_count > 0 -- so
   // there's no orphaned-subtree cleanup to do here beyond dropping its own
-  // now-stale cached children entry, if it had one).
+  // now-stale cached children entry, if it had one). Its parent's page is
+  // re-fetched so a deleted row doesn't leave the current page short.
   useEffect(() => {
     return subscribeDeleted((pageId) => {
+      let parentOfDeleted: string | null = null;
       childrenRef.current = Object.fromEntries(
         Object.entries(childrenRef.current)
           .filter(([parentId]) => parentId !== pageId)
-          .map(([parentId, pages]) => [parentId, pages.filter((p) => p.id !== pageId)])
+          .map(([parentId, pages]) => {
+            if (pages.some((p) => p.id === pageId)) parentOfDeleted = parentId;
+            return [parentId, pages.filter((p) => p.id !== pageId)];
+          })
       );
       setChildren(childrenRef.current);
+      if (parentOfDeleted !== null) {
+        generationRef.current += 1;
+        fetchChildren(parentOfDeleted, generationRef.current, pageByKeyRef.current[parentOfDeleted] ?? 1);
+      }
     });
   }, [subscribeDeleted]);
 
@@ -166,9 +200,11 @@ export default function PageTree({ spaceId }: Props) {
         parent_id: parentId || undefined,
         title,
       });
-      const existing = childrenRef.current[parentId] ?? [];
-      childrenRef.current = { ...childrenRef.current, [parentId]: sortPages([...existing, page]) };
-      setChildren(childrenRef.current);
+      // A new page is alphabetical, so it can land on any page of its
+      // level -- jump to page 1 and refetch rather than guessing whether
+      // it belongs on the page currently shown.
+      generationRef.current += 1;
+      await fetchChildren(parentId, generationRef.current, 1);
       if (parentId) setExpanded((prev) => new Set(prev).add(parentId));
       setCreatingUnder(null);
       setNewTitle("");
@@ -196,14 +232,13 @@ export default function PageTree({ spaceId }: Props) {
     setRenaming(true);
     setError(null);
     try {
-      const updated = await updatePage(token, page.id, { title });
-      childrenRef.current = Object.fromEntries(
-        Object.entries(childrenRef.current).map(([parentId, pages]) => [
-          parentId,
-          sortPages(pages.map((p) => (p.id === updated.id ? updated : p))),
-        ])
-      );
-      setChildren(childrenRef.current);
+      await updatePage(token, page.id, { title });
+      // Same reasoning as create: a rename can move a page to a different
+      // page of its level -- refetch the current page rather than patching
+      // in place and hoping it's still correctly positioned.
+      const parentId = page.parent_id ?? ROOT_KEY;
+      generationRef.current += 1;
+      await fetchChildren(parentId, generationRef.current, pageByKeyRef.current[parentId] ?? 1);
       setRenamingId(null);
     } catch (e) {
       setError((e as Error).message);
@@ -251,14 +286,17 @@ export default function PageTree({ spaceId }: Props) {
     });
   }
 
+  /** Renders one level's page rows, its pager, and its own "+ New page"
+   * create row -- a single function so both the root call site and the
+   * recursive expanded-child call site get the pager without duplicating
+   * it at each caller. */
   function renderLevel(parentId: string) {
     const entries = children[parentId];
-    if (!entries) {
-      return loading.has(parentId) ? <p className="px-2 py-1 text-xs text-slate-400">…</p> : null;
-    }
+    const isLoading = loading.has(parentId);
     return (
       <div>
-        {entries.map((page) => {
+        {!entries && (isLoading ? <p className="px-2 py-1 text-xs text-slate-400">…</p> : null)}
+        {entries?.map((page) => {
           const isSelected = selectedPageId === page.id;
           const isExpanded = expanded.has(page.id);
           // A page just given its first child (via the "+" affordance
@@ -321,15 +359,17 @@ export default function PageTree({ spaceId }: Props) {
                   <span className="opacity-0 group-hover:opacity-100">{plusIcon}</span>
                 </IconButton>
               </div>
-              {isExpanded && (
-                <div className="ml-4 border-l-2 border-slate-200 pl-2">
-                  {renderLevel(page.id)}
-                  {renderCreateRow(page.id)}
-                </div>
-              )}
+              {isExpanded && <div className="ml-4 border-l-2 border-slate-200 pl-2">{renderLevel(page.id)}</div>}
             </div>
           );
         })}
+        <Pager
+          page={pageByKey[parentId] ?? 1}
+          totalPages={totalPages(totalByKey[parentId] ?? 0)}
+          onChange={(page) => fetchChildren(parentId, generationRef.current, page)}
+          disabled={isLoading}
+        />
+        {renderCreateRow(parentId)}
       </div>
     );
   }
@@ -338,7 +378,6 @@ export default function PageTree({ spaceId }: Props) {
   return (
     <div>
       {renderLevel(ROOT_KEY)}
-      {renderCreateRow(ROOT_KEY)}
       <button
         type="button"
         onClick={() => setCreatingUnder(ROOT_KEY)}

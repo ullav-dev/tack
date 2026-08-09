@@ -20,9 +20,10 @@ import {
 } from "@/lib/tack-server-api";
 import MarkdownComposer from "@/components/MarkdownComposer";
 import DeleteNoteFolderModal from "@/components/DeleteNoteFolderModal";
+import Pager from "@/components/Pager";
 import { IconButton, deleteIcon, editIcon, folderIcon, folderOpenIcon, noteIcon } from "@/components/Icon";
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 25;
 
 /** Sentinel key for the virtual "Default" folder -- every note filed
  * nowhere else lives here, so there is never a bare, un-contained note in
@@ -32,15 +33,15 @@ const PAGE_SIZE = 20;
 const DEFAULT_KEY = "__default__";
 
 /** The backend already returns folders `ORDER BY lower(name)`, but that
- * only covers the initial fetch -- a freshly created folder was appended to
- * the end of the array client-side, and a rename didn't re-sort in place,
- * so the visible order drifted after any edit. Re-sorting here (locale-
- * aware, via `localeCompare` -- generally more correct than SQL's `lower()`
- * across languages) after every state update that can change a name or add
- * a row is what actually keeps it alphabetical, not just "alphabetical
- * until you touch it." */
+ * only covers one fetched page -- a freshly created folder needs the same
+ * client-side re-sort (a create can land it on whatever page is currently
+ * shown), and a rename didn't re-sort in place either. */
 function sortFolders(folders: NoteFolder[]): NoteFolder[] {
   return [...folders].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function totalPages(total: number): number {
+  return Math.max(1, Math.ceil(total / PAGE_SIZE));
 }
 
 /** A real two-level folder browser for Notes: folders as expandable
@@ -61,18 +62,23 @@ function sortFolders(folders: NoteFolder[]): NoteFolder[] {
  * at the very top, ahead of the folder list, not mixed in among per-folder
  * actions at the bottom.
  *
- * Each folder keeps its own paginated note list -- notes are paginated
- * (unlike Pages), so "Load more" is scoped to whichever folder it's
- * rendered under, not shared.
+ * Both the folder list itself and each folder's note list are real,
+ * server-paginated pages (`Pager`, `limit`/`offset`/`total`) -- not a
+ * "Load more" that grows forever, and not skipped on the folder list just
+ * because folder counts are usually small ("who knows the use cases... if
+ * a lot it is needed" -- the standing rule for every list in this app, not
+ * a case-by-case guess). A folder's own contents load only once it's
+ * expanded; the folder list itself loads on mount (it's cheap metadata,
+ * not note content).
  *
  * A note's folder change (via NoteThread) is applied here by a full local
- * resync (refetch the folder list + every currently-loaded section) rather
- * than trying to surgically relocate the note client-side -- an earlier
- * version tried the surgical approach and silently dropped the note when
- * its old folder had never been expanded (so wasn't cached locally) --
- * "moving a note to Unfiled doesn't work" was a direct symptom of that.
- * The resync costs one extra round-trip per move; correctness in every
- * case is worth it here.
+ * resync (refetch the folder list + every currently-expanded folder's
+ * *current page*) rather than trying to surgically relocate the note
+ * client-side -- an earlier version tried the surgical approach and
+ * silently dropped the note when its old folder had never been expanded
+ * (so wasn't cached locally) -- "moving a note to Unfiled doesn't work" was
+ * a direct symptom of that. The resync costs one extra round-trip per move;
+ * correctness in every case is worth it here.
  *
  * Not yet factored into an embeddable local package (see this repo's
  * CLAUDE.md, "Build for reuse") -- this component talks directly to
@@ -81,8 +87,8 @@ function sortFolders(folders: NoteFolder[]): NoteFolder[] {
  * would need to take as injected props/a passed-in client instead, so
  * another app's own auth/team context can drive it. Marked here rather than
  * attempted here -- that's a separate, deliberate PR. Icons (`Icon.tsx`)
- * are shared with NoteThread already, a first concrete step in that
- * direction. */
+ * and `Pager` are shared with NoteThread/PageTree/Navigator already, a
+ * concrete step in that direction. */
 export default function NoteTree() {
   const { token } = useAuth();
   const { activeTeam } = useTeam();
@@ -94,12 +100,15 @@ export default function NoteTree() {
   const selectedNoteId = params.noteId;
 
   const [folders, setFolders] = useState<NoteFolder[] | null>(null);
+  const [foldersTotal, setFoldersTotal] = useState(0);
+  const [foldersPage, setFoldersPage] = useState(1);
   const [foldersError, setFoldersError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   // Keyed by folder id, or DEFAULT_KEY for the virtual Default folder.
   const [notesByKey, setNotesByKey] = useState<Record<string, Note[]>>({});
-  const [hasMoreByKey, setHasMoreByKey] = useState<Record<string, boolean>>({});
+  const [totalByKey, setTotalByKey] = useState<Record<string, number>>({});
+  const [pageByKey, setPageByKey] = useState<Record<string, number>>({});
   const [loadingKeys, setLoadingKeys] = useState<Set<string>>(new Set());
   const [notesError, setNotesError] = useState<string | null>(null);
 
@@ -124,36 +133,34 @@ export default function NoteTree() {
 
   const generationRef = useRef(0);
   const notesByKeyRef = useRef<Record<string, Note[]>>({});
+  const pageByKeyRef = useRef<Record<string, number>>({});
 
   function folderOpts(key: string): { folderId?: string; unfiled?: boolean } {
     return key === DEFAULT_KEY ? { unfiled: true } : { folderId: key };
   }
 
-  /** `offset`/`limit`/`append` fully determine the fetch -- a first load is
-   * `(0, PAGE_SIZE, false)`, "Load more" is `(loaded, PAGE_SIZE, true)`, and
-   * a resync re-fetches everything already loaded via
-   * `(0, max(loaded, PAGE_SIZE), false)` -- see `refetchLoaded`. Kept as
-   * three explicit params (not one column doing double duty as both an
-   * offset and a limit) after an earlier version conflated them and
-   * silently fetched page 2 (empty) on every refresh instead of refreshing
-   * page 1. */
-  async function fetchNotes(key: string, generation: number, offset: number, limit: number, append: boolean) {
+  async function fetchNotes(key: string, generation: number, page: number) {
     if (!token || !activeTeam) return;
     setLoadingKeys((prev) => new Set(prev).add(key));
     try {
-      const page = await listNotes(token, activeTeam.id, { limit, offset, ...folderOpts(key) });
+      const result = await listNotes(token, activeTeam.id, {
+        limit: PAGE_SIZE,
+        offset: (page - 1) * PAGE_SIZE,
+        ...folderOpts(key),
+      });
       if (generation !== generationRef.current) return;
-      const existing = append ? (notesByKeyRef.current[key] ?? []) : [];
-      notesByKeyRef.current = { ...notesByKeyRef.current, [key]: [...existing, ...page.notes] };
+      notesByKeyRef.current = { ...notesByKeyRef.current, [key]: result.notes };
+      pageByKeyRef.current = { ...pageByKeyRef.current, [key]: page };
       setNotesByKey(notesByKeyRef.current);
-      setHasMoreByKey((prev) => ({ ...prev, [key]: page.has_more }));
+      setPageByKey(pageByKeyRef.current);
+      setTotalByKey((prev) => ({ ...prev, [key]: result.total }));
     } catch (e) {
       if (generation === generationRef.current) setNotesError((e as Error).message);
     } finally {
       // Unconditional (not gated on `generation === generationRef.current`):
       // a resync bumps the generation for every in-flight load, and gating
       // this left a section stuck "loading" forever after a mid-flight
-      // resync, permanently hiding its "Load more".
+      // resync.
       setLoadingKeys((prev) => {
         const next = new Set(prev);
         next.delete(key);
@@ -162,39 +169,31 @@ export default function NoteTree() {
     }
   }
 
-  function loadMore(key: string) {
-    if (loadingKeys.has(key)) return;
-    fetchNotes(key, generationRef.current, notesByKeyRef.current[key]?.length ?? 0, PAGE_SIZE, true);
-  }
-
-  async function refreshFolders() {
+  async function fetchFolders(generation: number, page: number) {
     if (!token || !activeTeam) return;
     try {
-      const f = await listNoteFolders(token, activeTeam.id);
-      setFolders(sortFolders(f));
+      const result = await listNoteFolders(token, activeTeam.id, { limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE });
+      if (generation !== generationRef.current) return;
+      setFolders(sortFolders(result.folders));
+      setFoldersTotal(result.total);
+      setFoldersPage(page);
     } catch (e) {
-      setFoldersError((e as Error).message);
+      if (generation === generationRef.current) setFoldersError((e as Error).message);
     }
   }
 
-  /** Re-fetches everything currently loaded under `key` (only ever true for
-   * a folder -- including Default -- that's actually been expanded),
-   * preserving its loaded count. */
-  function refetchLoaded(key: string, generation: number) {
-    const limit = Math.max(notesByKeyRef.current[key]?.length ?? 0, PAGE_SIZE);
-    return fetchNotes(key, generation, 0, limit, false);
-  }
-
-  /** Full local resync: the folder list (note_count badges) plus every
-   * section that's actually loaded right now. See this component's doc
-   * comment for why a folder move triggers this instead of a surgical
-   * client-side relocation. */
+  /** Full local resync: the folder list (at its current page, for
+   * note_count badges) plus every folder that's actually expanded right
+   * now (at *its* current page). See this component's doc comment for why
+   * a folder move triggers this instead of a surgical client-side
+   * relocation. */
   async function resync() {
     generationRef.current += 1;
     const generation = generationRef.current;
-    await refreshFolders();
-    const keys = Object.keys(notesByKeyRef.current);
-    await Promise.all(keys.map((key) => refetchLoaded(key, generation)));
+    await fetchFolders(generation, foldersPage);
+    await Promise.all(
+      Array.from(expanded).map((key) => fetchNotes(key, generation, pageByKeyRef.current[key] ?? 1))
+    );
   }
 
   // Only the folder list itself loads on mount/team switch -- cheap
@@ -204,21 +203,19 @@ export default function NoteTree() {
     generationRef.current += 1;
     const generation = generationRef.current;
     notesByKeyRef.current = {};
+    pageByKeyRef.current = {};
     setNotesByKey({});
-    setHasMoreByKey({});
+    setTotalByKey({});
+    setPageByKey({});
     setLoadingKeys(new Set());
     setExpanded(new Set());
     setNotesError(null);
     setFolders(null);
+    setFoldersTotal(0);
+    setFoldersPage(1);
     setFoldersError(null);
     if (!token || !activeTeam) return;
-    listNoteFolders(token, activeTeam.id)
-      .then((f) => {
-        if (generation === generationRef.current) setFolders(sortFolders(f));
-      })
-      .catch((e) => {
-        if (generation === generationRef.current) setFoldersError(e.message);
-      });
+    fetchFolders(generation, 1);
   }, [token, activeTeam]);
 
   function toggleFolder(key: string) {
@@ -228,7 +225,7 @@ export default function NoteTree() {
         next.delete(key);
       } else {
         next.add(key);
-        if (!notesByKeyRef.current[key]) fetchNotes(key, generationRef.current, 0, PAGE_SIZE, false);
+        if (!notesByKeyRef.current[key]) fetchNotes(key, generationRef.current, 1);
       }
       return next;
     });
@@ -262,6 +259,7 @@ export default function NoteTree() {
       notesByKeyRef.current = next;
       setNotesByKey(next);
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subscribe, token, activeTeam]);
 
   useEffect(() => {
@@ -286,8 +284,13 @@ export default function NoteTree() {
     setSavingFolder(true);
     setFoldersError(null);
     try {
-      const folder = await createNoteFolder(token, { team_id: activeTeam.id, name });
-      setFolders((prev) => sortFolders([...(prev ?? []), folder]));
+      await createNoteFolder(token, { team_id: activeTeam.id, name });
+      // A new folder can land anywhere alphabetically, possibly on a
+      // different page than the one currently shown -- simplest correct
+      // behavior is to jump back to page 1 and refetch, rather than
+      // guessing whether it belongs on the current page.
+      generationRef.current += 1;
+      await fetchFolders(generationRef.current, 1);
       setCreatingFolder(false);
       setNewFolderName("");
     } catch (e) {
@@ -313,8 +316,12 @@ export default function NoteTree() {
     setRenaming(true);
     setFoldersError(null);
     try {
-      const updated = await renameNoteFolder(token, folder.id, name);
-      setFolders((prev) => (prev ? sortFolders(prev.map((f) => (f.id === updated.id ? updated : f))) : prev));
+      await renameNoteFolder(token, folder.id, name);
+      // Same reasoning as create: a rename can move a folder to a
+      // different page -- refetch the current page rather than patching
+      // in place and hoping it's still correctly positioned.
+      generationRef.current += 1;
+      await fetchFolders(generationRef.current, foldersPage);
       setRenamingId(null);
     } catch (e) {
       setFoldersError((e as Error).message);
@@ -326,7 +333,6 @@ export default function NoteTree() {
   async function handleDeleteFolder(folder: NoteFolder) {
     if (!token) return;
     await deleteNoteFolder(token, folder.id);
-    setFolders((prev) => prev?.filter((f) => f.id !== folder.id) ?? prev);
     setExpanded((prev) => {
       const next = new Set(prev);
       next.delete(folder.id);
@@ -336,11 +342,19 @@ export default function NoteTree() {
     delete next[folder.id];
     notesByKeyRef.current = next;
     setNotesByKey(next);
+    generationRef.current += 1;
+    const generation = generationRef.current;
+    // A deleted folder can leave the current page short a row (or empty) --
+    // re-clamp to the last valid page rather than assuming the current one
+    // is still in range.
+    const remaining = foldersTotal - 1;
+    const targetPage = Math.min(foldersPage, totalPages(remaining));
+    await fetchFolders(generation, targetPage);
     // The folder's notes fall back into Default server-side -- refetch it
     // (if it's been expanded) so they actually appear there instead of
     // just vanishing from view.
-    if (notesByKeyRef.current[DEFAULT_KEY] || expanded.has(DEFAULT_KEY)) {
-      refetchLoaded(DEFAULT_KEY, generationRef.current);
+    if (expanded.has(DEFAULT_KEY)) {
+      await fetchNotes(DEFAULT_KEY, generation, pageByKeyRef.current[DEFAULT_KEY] ?? 1);
     }
     setDeletingFolder(null);
   }
@@ -356,12 +370,15 @@ export default function NoteTree() {
         body_markdown: newBody.trim(),
         folder_id: key === DEFAULT_KEY ? undefined : key,
       });
-      const existing = notesByKeyRef.current[key] ?? [];
-      notesByKeyRef.current = { ...notesByKeyRef.current, [key]: [note, ...existing] };
-      setNotesByKey(notesByKeyRef.current);
+      // A new note is newest-first, so it always lands on page 1 of its
+      // folder -- jump there rather than trying to splice it into whatever
+      // page is currently shown.
+      generationRef.current += 1;
+      const generation = generationRef.current;
+      await fetchNotes(key, generation, 1);
       // Filing a new note into a real folder changes that folder's
       // note_count -- Default has no count badge to keep in sync.
-      if (key !== DEFAULT_KEY) refreshFolders();
+      if (key !== DEFAULT_KEY) await fetchFolders(generation, foldersPage);
       setComposingUnder(null);
       setNewTitle("");
       setNewBody("");
@@ -422,17 +439,19 @@ export default function NoteTree() {
     );
   }
 
-  /** Renders one folder's note rows plus its own "+ Add note" affordance --
-   * nesting under the folder row is done by the *caller* wrapping this in
-   * an indent+guide container, not by this function computing a depth-scaled
-   * padding itself (see the folder-row render below for why: a folder's own
-   * label, past its chevron and icon, previously ended up starting to the
-   * *right* of its children's text when indentation was padding-only). */
+  /** Renders one folder's note rows, its pager, and its own "+ Add note"
+   * affordance -- nesting under the folder row is done by the *caller*
+   * wrapping this in an indent+guide container, not by this function
+   * computing a depth-scaled padding itself (see the folder-row render
+   * below for why: a folder's own label, past its chevron and icon,
+   * previously ended up starting to the *right* of its children's text
+   * when indentation was padding-only). */
   function renderFolderContents(key: string) {
     const notes = notesByKey[key];
+    const loading = loadingKeys.has(key);
     return (
       <>
-        {!notes && (loadingKeys.has(key) ? <p className="text-xs text-slate-400 px-2 py-1">…</p> : null)}
+        {!notes && (loading ? <p className="text-xs text-slate-400 px-2 py-1">…</p> : null)}
         {notes?.map((note) => {
           const isSelected = selectedNoteId === note.id;
           return (
@@ -449,18 +468,13 @@ export default function NoteTree() {
           );
         })}
         {notes?.length === 0 && <p className="text-xs text-slate-400 px-2 py-1">{t("noNotes")}</p>}
-        {loadingKeys.has(key) && notes && notes.length > 0 && (
-          <p className="text-xs text-slate-400 px-2 py-1">{t("loading")}</p>
-        )}
-        {hasMoreByKey[key] && !loadingKeys.has(key) && (
-          <button
-            type="button"
-            onClick={() => loadMore(key)}
-            className="block px-2 py-1 text-xs font-medium text-rose-700 hover:underline"
-          >
-            {t("loadMore")}
-          </button>
-        )}
+        {loading && notes && notes.length > 0 && <p className="text-xs text-slate-400 px-2 py-1">{t("loading")}</p>}
+        <Pager
+          page={pageByKey[key] ?? 1}
+          totalPages={totalPages(totalByKey[key] ?? 0)}
+          onChange={(page) => fetchNotes(key, generationRef.current, page)}
+          disabled={loading}
+        />
         {renderComposer(key)}
         {composingUnder !== key && (
           <button
@@ -567,11 +581,18 @@ export default function NoteTree() {
 
       {/* Default is always here, pinned first, before any real folders --
           every note lives in some folder, this is where one lands with no
-          explicit choice made. */}
+          explicit choice made. Rendered outside the paginated folder list
+          -- it isn't a real note_folders row, so it isn't part of what
+          `foldersTotal`/`foldersPage` counts. */}
       {renderFolderRow(DEFAULT_KEY, t("defaultFolder"), null, null)}
 
       {!folders && !foldersError && <p className="px-2 py-1 text-xs text-slate-400">{t("loading")}</p>}
       {folders?.map((folder) => renderFolderRow(folder.id, folder.name, folder.note_count, folder))}
+      <Pager
+        page={foldersPage}
+        totalPages={totalPages(foldersTotal)}
+        onChange={(page) => fetchFolders(generationRef.current, page)}
+      />
 
       {deletingFolder && (
         <DeleteNoteFolderModal
