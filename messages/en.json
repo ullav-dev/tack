@@ -8,9 +8,7 @@
   "nav": {
     "signIn": "Sign in",
     "signOut": "Sign out",
-    "myDetails": "My Details",
-    "spaces": "Spaces",
-    "notes": "Notes"
+    "myDetails": "My Details"
   },
   "navigator": {
     "spaces": "Spaces",
@@ -52,7 +50,8 @@
     "deleteFolderConfirmTitle": "Delete “{name}”?",
     "deleteFolderConfirmBodyEmpty": "This folder is empty. Deleting it cannot be undone.",
     "deleteFolderConfirmBodyWithNotes": "{count, plural, one {# note} other {# notes}} in this folder will be unfiled, not deleted. This cannot be undone.",
-    "newNote": "New note"
+    "newNote": "New note",
+    "viewInFolder": "View in folder"
   },
   "editor": {
     "loading": "Loading…",

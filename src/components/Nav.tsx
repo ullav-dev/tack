@@ -72,14 +72,6 @@ export default function Nav() {
           <nav className="flex items-center gap-4">
             {!isLoading && user ? (
               <>
-                <div className="hidden sm:flex items-center gap-4 pr-4 border-r border-slate-200">
-                  <Link href="/spaces" className="text-sm font-medium text-slate-600 hover:text-rose-700 transition-colors">
-                    {t("spaces")}
-                  </Link>
-                  <Link href="/notes" className="text-sm font-medium text-slate-600 hover:text-rose-700 transition-colors">
-                    {t("notes")}
-                  </Link>
-                </div>
                 <TeamSelector />
                 <LocaleSwitcher />
 

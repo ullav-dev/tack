@@ -8,9 +8,7 @@
   "nav": {
     "signIn": "Sínigh isteach",
     "signOut": "Logáil amach",
-    "myDetails": "Mo Shonraí",
-    "spaces": "Spásanna",
-    "notes": "Nótaí"
+    "myDetails": "Mo Shonraí"
   },
   "navigator": {
     "spaces": "Spásanna",
@@ -52,7 +50,8 @@
     "deleteFolderConfirmTitle": "Scrios “{name}”?",
     "deleteFolderConfirmBodyEmpty": "Tá an fillteán seo folamh. Ní féidir an scriosadh a chur ar ceal.",
     "deleteFolderConfirmBodyWithNotes": "Bainfear {count, plural, one {# nóta} other {# nóta}} sa fillteán seo as comhadú, ní scriosfar iad. Ní féidir é seo a chur ar ceal.",
-    "newNote": "Nóta nua"
+    "newNote": "Nóta nua",
+    "viewInFolder": "Amharc san fhillteán"
   },
   "editor": {
     "loading": "Á lódáil…",

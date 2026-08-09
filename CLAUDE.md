@@ -44,6 +44,8 @@ Every list that could grow large — a folder's notes, the Notes folder list its
 
 Search (Navigator's search box, backed by `tack-server`'s hybrid `GET /search`) is grouped by content type — Notes / Pages, each its own paginated section (`Pager.tsx`) — not a single flat, unlabeled list. A hit shows its real title, a highlighted matched snippet (OpenSearch's own `<em>` fragments, parsed and rendered as a `<mark>` rather than trusted as raw HTML via `dangerouslySetInnerHTML`), and a folder badge when a note hit is filed (resolved client-side against the active team's own folder list — a hit from a different team just shows without a badge, since search itself isn't team-scoped). A reply hit links to its parent thread (`/notes/{parent_id}`), not itself, and shows "In a reply" in place of its own (always-empty) title.
 
+A top-level note hit (not a reply — a reply has no `folder_id` of its own) also gets a "view in folder" action: it clears the search, switches the Navigator to the Notes tab, and asks `NoteTree` to expand that note's real folder (the virtual Default folder when unfiled) and navigate to it, rather than only ever opening the note in isolation from a search result. `Navigator` owns the request's lifetime (`revealRequest`/`onRevealed`) rather than `NoteTree` owning it directly, since the click can happen while `NoteTree` isn't even mounted (the Spaces tab active). It doesn't try to land on the exact page containing the note — there's no "which page is this note on" query — just expands the right folder, loads its first page, and scrolls that folder row into view.
+
 ## Branch Policy
 
 Feature branches merge to `main` via PR; do not commit directly to `main`.

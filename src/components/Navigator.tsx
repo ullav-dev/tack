@@ -120,6 +120,14 @@ export default function Navigator() {
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
 
+  // "View in folder" from a note search result: clears the search, switches
+  // to the Notes tab, and asks NoteTree to expand+navigate to the note's
+  // real folder. Lives here (not in NoteTree) since it has to survive
+  // NoteTree not even being mounted yet at the moment the result is
+  // clicked (the Spaces tab could be active). NoteTree clears it via
+  // `onRevealed` once handled.
+  const [revealRequest, setRevealRequest] = useState<{ noteId: string; folderId: string | null } | null>(null);
+
   // Cheap metadata (names only, not note content), fetched once per team so
   // a note hit's folder badge can show a real name instead of a raw id.
   // Only ever covers the *active* team's folders -- a hit belonging to a
@@ -217,6 +225,12 @@ export default function Navigator() {
     setPagesPage(page);
     searchGenerationRef.current += 1;
     runSearch(query.trim(), notesPage, page, searchGenerationRef.current);
+  }
+
+  function handleViewInFolder(hit: SearchHit) {
+    setQuery("");
+    setActiveTab("notes");
+    setRevealRequest({ noteId: hit.content_id, folderId: hit.folder_id });
   }
 
   function setActiveTab(tab: NavigatorTab) {
@@ -327,7 +341,7 @@ export default function Navigator() {
                   <p className="px-3 py-1 text-xs text-slate-400">{t("noResults")}</p>
                 )}
                 {searchResults.notes.hits.map((hit) => (
-                  <SearchResultRow key={hit.content_id} hit={hit} folders={searchFolders} />
+                  <SearchResultRow key={hit.content_id} hit={hit} folders={searchFolders} onViewInFolder={handleViewInFolder} />
                 ))}
                 <Pager
                   page={notesPage}
@@ -362,7 +376,7 @@ export default function Navigator() {
             <div className="px-4 pb-1 flex items-center justify-end">
               <RefreshControl onRefresh={triggerRefresh} storageKey="tack_notes_refresh_interval" />
             </div>
-            <NoteTree />
+            <NoteTree revealRequest={revealRequest} onRevealed={() => setRevealRequest(null)} />
           </div>
         ) : (
           <div className="py-2">
@@ -475,7 +489,19 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
   );
 }
 
-function SearchResultRow({ hit, folders }: { hit: SearchHit; folders: NoteFolder[] }) {
+function SearchResultRow({
+  hit,
+  folders,
+  onViewInFolder,
+}: {
+  hit: SearchHit;
+  folders: NoteFolder[];
+  /** Only meaningful for a top-level note hit -- a reply has no folder of
+   * its own (`folder_id` is only ever set on a top-level note, see
+   * tack-server's index_note), and a page hit is revealed via its own
+   * space/PageTree, not this. Omitted entirely for page rows below. */
+  onViewInFolder?: (hit: SearchHit) => void;
+}) {
   const t = useTranslations("navigator");
   const isReply = hit.content_type === "note" && hit.parent_id !== null;
   // A reply hit links to its parent thread (it has no useful standalone
@@ -489,6 +515,7 @@ function SearchResultRow({ hit, folders }: { hit: SearchHit; folders: NoteFolder
         : null;
   const folderName = hit.folder_id ? folders.find((f) => f.id === hit.folder_id)?.name : undefined;
   const snippet = hit.highlight[0] ?? hit.text;
+  const canViewInFolder = onViewInFolder && hit.content_type === "note" && !isReply;
 
   const body = (
     <>
@@ -499,6 +526,20 @@ function SearchResultRow({ hit, folders }: { hit: SearchHit; folders: NoteFolder
         </span>
         {folderName && (
           <span className="shrink-0 text-xs px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">{folderName}</span>
+        )}
+        {canViewInFolder && (
+          <IconButton
+            title={t("viewInFolder")}
+            onClick={(e) => {
+              // Stop the click from bubbling to the wrapping <Link> below,
+              // which would otherwise also navigate/follow its own href.
+              e.preventDefault();
+              e.stopPropagation();
+              onViewInFolder(hit);
+            }}
+          >
+            {folderIcon}
+          </IconButton>
         )}
       </div>
       <p className="truncate text-xs text-slate-500 pl-5.5">{renderHighlight(snippet)}</p>
