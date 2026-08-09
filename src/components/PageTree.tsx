@@ -6,8 +6,8 @@ import { useTranslations } from "next-intl";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePageEvents } from "@/contexts/PageEventsContext";
-import { createPage, listPages, type Page } from "@/lib/tack-server-api";
-import { IconButton, pageIcon, plusIcon } from "@/components/Icon";
+import { createPage, listPages, updatePage, type Page } from "@/lib/tack-server-api";
+import { IconButton, editIcon, pageIcon, plusIcon } from "@/components/Icon";
 
 interface Props {
   spaceId: string;
@@ -16,6 +16,14 @@ interface Props {
 /** Sentinel key for the space's root pages (parent_id IS NULL) — mirrors
  * lagan's RepoTreePanel using `""` for a git tree's root directory. */
 const ROOT_KEY = "";
+
+/** The backend returns a level's pages `ORDER BY lower(title)`, but a
+ * freshly created page was appended to the end of its parent's array
+ * client-side, and a title edit didn't re-sort in place -- same fix, same
+ * rationale as NoteTree's `sortFolders`/Navigator's `sortSpaces`. */
+function sortPages(pages: Page[]): Page[] {
+  return [...pages].sort((a, b) => a.title.localeCompare(b.title));
+}
 
 /** Lazy-loaded hierarchical Page tree for one space — directly mirrors
  * `lagan/src/components/RepoTreePanel.tsx`'s pattern: children are fetched
@@ -54,6 +62,24 @@ export default function PageTree({ spaceId }: Props) {
   const [creatingUnder, setCreatingUnder] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState("");
   const [creating, setCreating] = useState(false);
+
+  /** Which page is currently showing the inline rename input, if any --
+   * mirrors NoteTree's folder rename. Renaming here is the tree-level
+   * equivalent of editing the title inline in PageEditor (same
+   * `PATCH /pages/:id`) -- added because that in-editor rename had no
+   * visible affordance signaling it was even possible.
+   *
+   * Known gap: PageEditor only ever *publishes* metadata changes via
+   * `usePageEvents` (`notifyPageUpdated`), it doesn't subscribe -- so
+   * renaming a page here while that same page's editor is open elsewhere
+   * won't update the open editor's title until it's reloaded. Pre-existing
+   * asymmetry in this pub/sub (NoteThread/NotesList have the same one-way
+   * shape), not introduced by this change, but this is the first path that
+   * can actually trigger it (there was previously no other way to rename a
+   * page than through the editor itself). */
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+  const [renaming, setRenaming] = useState(false);
 
   const generationRef = useRef(0);
   // Mirrors `children` synchronously so `load`'s cache check can't read a
@@ -106,7 +132,9 @@ export default function PageTree({ spaceId }: Props) {
       childrenRef.current = Object.fromEntries(
         Object.entries(childrenRef.current).map(([parentId, pages]) => [
           parentId,
-          pages.map((p) => (p.id === pageId ? { ...p, ...patch } : p)),
+          // A title patch can change sort order, not just the displayed
+          // text -- re-sort the level it's in, not just update it in place.
+          sortPages(pages.map((p) => (p.id === pageId ? { ...p, ...patch } : p))),
         ])
       );
       setChildren(childrenRef.current);
@@ -139,7 +167,7 @@ export default function PageTree({ spaceId }: Props) {
         title,
       });
       const existing = childrenRef.current[parentId] ?? [];
-      childrenRef.current = { ...childrenRef.current, [parentId]: [...existing, page] };
+      childrenRef.current = { ...childrenRef.current, [parentId]: sortPages([...existing, page]) };
       setChildren(childrenRef.current);
       if (parentId) setExpanded((prev) => new Set(prev).add(parentId));
       setCreatingUnder(null);
@@ -149,6 +177,38 @@ export default function PageTree({ spaceId }: Props) {
       setError((e as Error).message);
     } finally {
       setCreating(false);
+    }
+  }
+
+  function startRename(page: Page) {
+    setRenamingId(page.id);
+    setRenameDraft(page.title);
+  }
+
+  async function handleRename(page: Page) {
+    const title = renameDraft.trim();
+    if (renaming) return;
+    // Blurring with an empty (or unchanged) draft just closes the input.
+    if (!token || !title || title === page.title) {
+      setRenamingId(null);
+      return;
+    }
+    setRenaming(true);
+    setError(null);
+    try {
+      const updated = await updatePage(token, page.id, { title });
+      childrenRef.current = Object.fromEntries(
+        Object.entries(childrenRef.current).map(([parentId, pages]) => [
+          parentId,
+          sortPages(pages.map((p) => (p.id === updated.id ? updated : p))),
+        ])
+      );
+      setChildren(childrenRef.current);
+      setRenamingId(null);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setRenaming(false);
     }
   }
 
@@ -206,6 +266,24 @@ export default function PageTree({ spaceId }: Props) {
           // list was fetched -- `isExpanded` (not `child_count`) is what
           // actually gates rendering its children, so that stays correct.
           const showToggle = page.child_count > 0 || isExpanded;
+          if (renamingId === page.id) {
+            return (
+              <div key={page.id} className="px-2 py-1">
+                <input
+                  autoFocus
+                  value={renameDraft}
+                  onChange={(e) => setRenameDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleRename(page);
+                    if (e.key === "Escape") setRenamingId(null);
+                  }}
+                  onBlur={() => handleRename(page)}
+                  disabled={renaming}
+                  className="w-full text-sm rounded border border-slate-200 px-1.5 py-0.5 focus:border-rose-400 focus:outline-none"
+                />
+              </div>
+            );
+          }
           return (
             <div key={page.id}>
               <div
@@ -229,6 +307,9 @@ export default function PageTree({ spaceId }: Props) {
                 <Link href={`/spaces/${spaceId}/pages/${page.id}`} className="truncate flex-1 min-w-0">
                   {page.title}
                 </Link>
+                <IconButton title={t("renamePage")} onClick={() => startRename(page)}>
+                  <span className="opacity-0 group-hover:opacity-100">{editIcon}</span>
+                </IconButton>
                 <IconButton
                   title={t("newPage")}
                   onClick={() => {

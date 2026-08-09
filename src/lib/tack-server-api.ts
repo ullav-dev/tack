@@ -42,6 +42,9 @@ export const listSpaces = (token: string): Promise<Space[]> => apiRequest("/spac
 export const createSpace = (token: string, payload: { team_id: string; name: string }): Promise<Space> =>
   apiRequest("/spaces", token, { method: "POST", body: JSON.stringify(payload) });
 
+export const renameSpace = (token: string, id: string, name: string): Promise<Space> =>
+  apiRequest(`/spaces/${id}`, token, { method: "PATCH", body: JSON.stringify({ name }) });
+
 // ── Pages ─────────────────────────────────────────────────────────────────────
 
 export interface Page {
