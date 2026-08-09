@@ -339,8 +339,48 @@ export interface SearchHit {
   content_id: string;
   content_type: string;
   score: number;
+  /** Empty for a reply -- see `Note.title`. */
+  title: string;
+  /** The matched chunk's raw text -- a fallback for when `highlight` is
+   * empty (a pure-semantic match can share zero literal terms with the
+   * query, so OpenSearch has nothing to highlight). */
   text: string;
+  /** `<em>`-wrapped fragments from OpenSearch's own highlighter. */
+  highlight: string[];
+  /** Set only for a note hit filed in a folder. */
+  folder_id: string | null;
+  /** Set only for a page hit -- what's needed to build
+   * `/spaces/:spaceId/pages/:pageId`. */
+  space_id: string | null;
+  /** Set only for a reply hit -- the parent (thread root) note's id. Link a
+   * reply hit to `/notes/{parent_id}`, not `/notes/{content_id}` (the
+   * reply's own id has no useful standalone view). */
+  parent_id: string | null;
 }
 
-export const search = (token: string, q: string): Promise<SearchHit[]> =>
-  apiRequest(`/search?q=${encodeURIComponent(q)}`, token);
+export interface SearchTypeResults {
+  hits: SearchHit[];
+  /** Total matching hits of this type, ignoring limit/offset -- lets the UI
+   * render "Page N of M" per type independently. */
+  total: number;
+}
+
+/** Grouped by content type, each paginated independently -- search stays
+ * global across both types regardless of which Navigator tab is active. */
+export interface SearchResults {
+  notes: SearchTypeResults;
+  pages: SearchTypeResults;
+}
+
+export const search = (
+  token: string,
+  q: string,
+  opts: { notesLimit?: number; notesOffset?: number; pagesLimit?: number; pagesOffset?: number } = {}
+): Promise<SearchResults> => {
+  const params = new URLSearchParams({ q });
+  if (opts.notesLimit !== undefined) params.set("notes_limit", String(opts.notesLimit));
+  if (opts.notesOffset !== undefined) params.set("notes_offset", String(opts.notesOffset));
+  if (opts.pagesLimit !== undefined) params.set("pages_limit", String(opts.pagesLimit));
+  if (opts.pagesOffset !== undefined) params.set("pages_offset", String(opts.pagesOffset));
+  return apiRequest(`/search?${params.toString()}`, token);
+};
