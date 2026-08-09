@@ -6,15 +6,52 @@ import { useTranslations } from "next-intl";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTeam } from "@/contexts/TeamContext";
 import { useNoteEvents } from "@/contexts/NoteEventsContext";
-import { createSpace, listSpaces, renameSpace, search, type SearchHit, type Space } from "@/lib/tack-server-api";
+import {
+  createSpace,
+  listNoteFolders,
+  listSpaces,
+  renameSpace,
+  search,
+  type NoteFolder,
+  type SearchHit,
+  type SearchResults,
+  type Space,
+} from "@/lib/tack-server-api";
 import PageTree from "@/components/PageTree";
 import NoteTree from "@/components/NoteTree";
 import RefreshControl from "@/components/RefreshControl";
 import Pager from "@/components/Pager";
-import { IconButton, editIcon, folderIcon, folderOpenIcon } from "@/components/Icon";
+import { IconButton, editIcon, folderIcon, folderOpenIcon, noteIcon, pageIcon } from "@/components/Icon";
 
 const SEARCH_DEBOUNCE_MS = 300;
 const SPACES_PAGE_SIZE = 25;
+const SEARCH_PAGE_SIZE = 10;
+
+/** Splits an OpenSearch highlight fragment on its own `<em>`/`</em>`
+ * markers and renders each piece as plain text (never as raw HTML) --
+ * these tags are OpenSearch's own fixed default highlight delimiters
+ * (never configured otherwise, never sourced from note/page content
+ * itself), but the *text between* them is real user-authored content, so
+ * this parses just those two literal tags rather than trusting the whole
+ * fragment as HTML via `dangerouslySetInnerHTML`. */
+function renderHighlight(fragment: string): React.ReactNode {
+  const nodes: React.ReactNode[] = [];
+  const re = /<em>(.*?)<\/em>/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+  while ((match = re.exec(fragment))) {
+    if (match.index > lastIndex) nodes.push(fragment.slice(lastIndex, match.index));
+    nodes.push(
+      <mark key={key++} className="bg-amber-100 text-amber-900 rounded-sm px-0.5">
+        {match[1]}
+      </mark>
+    );
+    lastIndex = re.lastIndex;
+  }
+  if (lastIndex < fragment.length) nodes.push(fragment.slice(lastIndex));
+  return nodes;
+}
 
 /** The backend returns one page of spaces `ORDER BY lower(name)`, but that
  * only covers the fetched page -- a freshly created or renamed space needs
@@ -77,9 +114,29 @@ export default function Navigator() {
   const [renamingSpace, setRenamingSpace] = useState(false);
 
   const [query, setQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<SearchHit[] | null>(null);
+  const [searchResults, setSearchResults] = useState<SearchResults | null>(null);
+  const [notesPage, setNotesPage] = useState(1);
+  const [pagesPage, setPagesPage] = useState(1);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+
+  // Cheap metadata (names only, not note content), fetched once per team so
+  // a note hit's folder badge can show a real name instead of a raw id.
+  // Only ever covers the *active* team's folders -- a hit belonging to a
+  // different team (search itself isn't team-scoped) just shows without a
+  // folder badge rather than a wrong or unresolved one.
+  const [searchFolders, setSearchFolders] = useState<NoteFolder[]>([]);
+  useEffect(() => {
+    if (!token || !activeTeam) {
+      setSearchFolders([]);
+      return;
+    }
+    listNoteFolders(token, activeTeam.id, { limit: 100 })
+      .then((result) => setSearchFolders(result.folders))
+      .catch(() => {
+        /* Non-fatal: folder badges just won't resolve a name. */
+      });
+  }, [token, activeTeam]);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchGenerationRef = useRef(0);
 
@@ -102,6 +159,25 @@ export default function Navigator() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
+  async function runSearch(q: string, atNotesPage: number, atPagesPage: number, generation: number) {
+    if (!token) return;
+    try {
+      const results = await search(token, q, {
+        notesLimit: SEARCH_PAGE_SIZE,
+        notesOffset: (atNotesPage - 1) * SEARCH_PAGE_SIZE,
+        pagesLimit: SEARCH_PAGE_SIZE,
+        pagesOffset: (atPagesPage - 1) * SEARCH_PAGE_SIZE,
+      });
+      if (generation !== searchGenerationRef.current) return;
+      setSearchResults(results);
+      setSearchError(null);
+    } catch (e) {
+      if (generation === searchGenerationRef.current) setSearchError((e as Error).message);
+    } finally {
+      if (generation === searchGenerationRef.current) setSearching(false);
+    }
+  }
+
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
@@ -116,25 +192,32 @@ export default function Navigator() {
     searchGenerationRef.current += 1;
     const generation = searchGenerationRef.current;
     setSearching(true);
+    // A new query always starts both sections back at page 1 -- carrying
+    // over whatever page a previous, unrelated query happened to be on
+    // wouldn't mean anything for this one.
+    setNotesPage(1);
+    setPagesPage(1);
     debounceRef.current = setTimeout(() => {
-      search(token, trimmed)
-        .then((hits) => {
-          if (generation !== searchGenerationRef.current) return;
-          setSearchResults(hits);
-          setSearchError(null);
-        })
-        .catch((e) => {
-          if (generation === searchGenerationRef.current) setSearchError(e.message);
-        })
-        .finally(() => {
-          if (generation === searchGenerationRef.current) setSearching(false);
-        });
+      runSearch(trimmed, 1, 1, generation);
     }, SEARCH_DEBOUNCE_MS);
 
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, token]);
+
+  function handleNotesPageChange(page: number) {
+    setNotesPage(page);
+    searchGenerationRef.current += 1;
+    runSearch(query.trim(), page, pagesPage, searchGenerationRef.current);
+  }
+
+  function handlePagesPageChange(page: number) {
+    setPagesPage(page);
+    searchGenerationRef.current += 1;
+    runSearch(query.trim(), notesPage, page, searchGenerationRef.current);
+  }
 
   function setActiveTab(tab: NavigatorTab) {
     setActiveTabState(tab);
@@ -231,12 +314,48 @@ export default function Navigator() {
           <div className="py-2">
             {searchError && <p className="px-3 py-1 text-xs text-red-600">{searchError}</p>}
             {searching && <p className="px-3 py-1 text-xs text-slate-400">{t("searching")}</p>}
-            {!searching && searchResults && searchResults.length === 0 && (
+            {!searching && searchResults && searchResults.notes.total === 0 && searchResults.pages.total === 0 && (
               <p className="px-3 py-1 text-xs text-slate-400">{t("noResults")}</p>
             )}
-            {searchResults?.map((hit) => (
-              <SearchResultRow key={`${hit.content_type}:${hit.content_id}`} hit={hit} />
-            ))}
+            {searchResults && (searchResults.notes.total > 0 || searchResults.pages.total > 0) && (
+              <>
+                <div className="px-3 pt-1 pb-1 flex items-baseline gap-1.5">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t("notes")}</span>
+                  <span className="text-xs text-slate-400">({searchResults.notes.total})</span>
+                </div>
+                {searchResults.notes.hits.length === 0 && (
+                  <p className="px-3 py-1 text-xs text-slate-400">{t("noResults")}</p>
+                )}
+                {searchResults.notes.hits.map((hit) => (
+                  <SearchResultRow key={hit.content_id} hit={hit} folders={searchFolders} />
+                ))}
+                <Pager
+                  page={notesPage}
+                  totalPages={Math.ceil(searchResults.notes.total / SEARCH_PAGE_SIZE)}
+                  onChange={handleNotesPageChange}
+                  disabled={searching}
+                />
+
+                <div className="px-3 pt-3 pb-1 flex items-baseline gap-1.5">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    {t("searchPagesSection")}
+                  </span>
+                  <span className="text-xs text-slate-400">({searchResults.pages.total})</span>
+                </div>
+                {searchResults.pages.hits.length === 0 && (
+                  <p className="px-3 py-1 text-xs text-slate-400">{t("noResults")}</p>
+                )}
+                {searchResults.pages.hits.map((hit) => (
+                  <SearchResultRow key={hit.content_id} hit={hit} folders={searchFolders} />
+                ))}
+                <Pager
+                  page={pagesPage}
+                  totalPages={Math.ceil(searchResults.pages.total / SEARCH_PAGE_SIZE)}
+                  onChange={handlePagesPageChange}
+                  disabled={searching}
+                />
+              </>
+            )}
           </div>
         ) : activeTab === "notes" ? (
           <div className="py-2">
@@ -356,20 +475,34 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
   );
 }
 
-function SearchResultRow({ hit }: { hit: SearchHit }) {
+function SearchResultRow({ hit, folders }: { hit: SearchHit; folders: NoteFolder[] }) {
   const t = useTranslations("navigator");
-  // Only Notes are indexed today (Page content indexing is a documented,
-  // pending backend gap — see tack-server's CLAUDE.md) -- and a Page hit
-  // wouldn't have enough information here to build its
-  // /spaces/:spaceId/pages/:pageId URL anyway, since search doesn't return
-  // a page's space id. Render other content types as non-navigable rather
-  // than link to something broken.
-  const href = hit.content_type === "note" ? `/notes/${hit.content_id}` : null;
+  const isReply = hit.content_type === "note" && hit.parent_id !== null;
+  // A reply hit links to its parent thread (it has no useful standalone
+  // view of its own); a page hit needs its space_id to build a real link
+  // at all -- both are now returned by the backend (they weren't before).
+  const href =
+    hit.content_type === "note"
+      ? `/notes/${hit.parent_id ?? hit.content_id}`
+      : hit.space_id
+        ? `/spaces/${hit.space_id}/pages/${hit.content_id}`
+        : null;
+  const folderName = hit.folder_id ? folders.find((f) => f.id === hit.folder_id)?.name : undefined;
+  const snippet = hit.highlight[0] ?? hit.text;
 
   const body = (
     <>
-      <p className="truncate text-sm text-slate-700">{hit.text}</p>
-      {!href && <p className="text-xs text-slate-400">{t("notIndexedYet")}</p>}
+      <div className="flex items-center gap-1.5">
+        <span className="shrink-0 text-slate-300">{hit.content_type === "note" ? noteIcon : pageIcon}</span>
+        <span className="truncate text-sm font-medium text-slate-800">
+          {isReply ? t("inAReply") : hit.title || t("untitledNote")}
+        </span>
+        {folderName && (
+          <span className="shrink-0 text-xs px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">{folderName}</span>
+        )}
+      </div>
+      <p className="truncate text-xs text-slate-500 pl-5.5">{renderHighlight(snippet)}</p>
+      {!href && <p className="text-xs text-slate-400 pl-5.5">{t("notIndexedYet")}</p>}
     </>
   );
 
