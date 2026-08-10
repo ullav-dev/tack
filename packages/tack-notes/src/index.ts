@@ -4,10 +4,14 @@ export type { TackNoteThreadProps } from "./TackNoteThread";
 export { default as TackNoteTree } from "./TackNoteTree";
 export type { TackNoteTreeProps } from "./TackNoteTree";
 
+export { default as TackNotesPanel } from "./TackNotesPanel";
+export type { TackNotesPanelProps } from "./TackNotesPanel";
+
 export { NoteEventsProvider, useNoteEvents } from "./NoteEventsContext";
 
 export { createTackNotesApi } from "./api";
 export type {
+  AttachRequest,
   Note,
   NoteFolder,
   NoteFoldersPage,

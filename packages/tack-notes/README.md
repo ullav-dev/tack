@@ -1,11 +1,22 @@
 # @ullav-dev/tack-notes
 
-Embeddable Notes UI (thread view + folder tree), backed by
+Embeddable Notes UI, backed by
 [tack-server](https://github.com/ullav-dev/tack-server). Extracted out of
 [`tack`](https://github.com/ullav-dev/tack)'s own `NoteThread`/`NoteTree` —
 see that repo's `CLAUDE.md` and the AWE-apps Notes migration plan for why.
 `tack` itself consumes this package as its own Notes UI (dogfooding), not a
 special first-party copy.
+
+Three top-level components, for two different information architectures:
+
+- **`TackNoteTree` + `TackNoteThread`** — tack's own app: browse a whole
+  team's notes by folder (a Confluence-style Navigator), then view one.
+- **`TackNotesPanel`** — everything else. Every AWE-based app's own
+  `NotesPanel` (cunav, togra, awe-client) attaches notes to one specific
+  entity (a ticket, a workflow, a job) — there's no folder browsing, just
+  "the notes on this thing." `TackNotesPanel` lists via
+  `GET /notes/by-entity`, composes `TackNoteThread` for the selected note's
+  detail, and is very likely the component your app wants, not the tree.
 
 ## Design: everything host-app-specific is a prop, nothing is assumed
 
@@ -86,14 +97,46 @@ have one.
 `saving`, `titlePlaceholder`, `visibility.organization`, `visibility.private`,
 `visibility.team`.
 
+`TackNotesPanel` calls (namespace `notes`, via `t` — a superset of
+`TackNoteThread`'s own list above, since it renders `TackNoteThread` directly
+for the detail pane): everything `TackNoteThread` needs, plus `addNote`,
+`backToList`, `noNotes`, `selectNote`, `unread`, `untitled`.
+
 ## Exports
 
-- `TackNoteThread`, `TackNoteTree` — the two panels.
+- `TackNoteThread`, `TackNoteTree` — tack's own app's two panels.
+- `TackNotesPanel` — the entity-attached notes widget every other app wants;
+  see the intro above.
 - `NoteEventsProvider`, `useNoteEvents`
 - `createTackNotesApi`
-- Types: `Note`, `NoteFolder`, `NoteFoldersPage`, `NoteRevision`,
-  `NotesPage`, `NoteRead`, `NoteUnreadStatus`, `SystemPrincipal`,
-  `SystemPrincipalsPage`, `TackNotesApi`, `TFunction`, `Visibility`
+- Types: `AttachRequest`, `Note`, `NoteFolder`, `NoteFoldersPage`,
+  `NoteRevision`, `NotesPage`, `NoteRead`, `NoteUnreadStatus`,
+  `SystemPrincipal`, `SystemPrincipalsPage`, `TackNotesApi`, `TFunction`,
+  `Visibility`
 - `NoteMarkdown`, `markdownToHtml` — the plain markdown renderer, exported in
   case a host app wants it standalone (e.g. rendering a note preview
   outside the thread view).
+
+## `TackNotesPanel` props
+
+`api`, `owningService`, `entityType`, `entityId`, `teamId`, `currentUserId`,
+`isAdmin`, `resolveAuthor`, `t` are required — the rest have defaults and
+cover every layout/behavior mode the existing per-app `NotesPanel`s already
+proved necessary:
+
+- `editable` (default `true`) — create/reply at all.
+- `compact` (default `false`) — narrower rows, smaller type; for a sidebar
+  widget placement.
+- `twoColumn` (default `false`) — list and detail side by side via a
+  draggable `ResizableSplit`, instead of the default stacked
+  "list, then detail in its place" layout.
+- `autoSelectFirst` (default `false`) — select the first note once the
+  initial list loads.
+- `defaultVisibility` (default `"team"`) — preselected in the new-note form.
+- `showUnreadBadges` (default `true`) — via `note_reads`; a note is marked
+  read the moment it's opened.
+- `refreshSignal` — bump to silently re-fetch the list in the background
+  (e.g. a host app's own polling) without disturbing the current selection.
+- `renderNoteActions(note)` — extra per-row actions (e.g. cunav's
+  "send as email"); clicks inside it don't select the row.
+- `ImagePicker` — same contract as `TackNoteThread`'s.
