@@ -266,14 +266,16 @@ export default function TackNotesPanel({
         ) : (
           <ul className="divide-y divide-slate-100">
             {notes.map((note) => (
-              <li key={note.id}>
-                <button
-                  type="button"
-                  onClick={() => handleSelect(note.id)}
-                  className={`w-full text-left px-3 py-2 flex items-start gap-2 hover:bg-slate-50 ${
-                    selectedId === note.id ? "bg-[var(--tnotes-50,#fff1f2)]" : ""
-                  } ${compact ? "text-xs" : "text-sm"}`}
-                >
+              <li
+                key={note.id}
+                className={`flex items-start gap-2 px-3 py-2 hover:bg-slate-50 ${
+                  selectedId === note.id ? "bg-[var(--tnotes-50,#fff1f2)]" : ""
+                } ${compact ? "text-xs" : "text-sm"}`}
+              >
+                {/* A plain div, not a button, wraps the row -- renderNoteActions
+                    (e.g. cunav's "send as email") can render its own button
+                    here, and a button can't nest another interactive element. */}
+                <button type="button" onClick={() => handleSelect(note.id)} className="flex-1 min-w-0 flex items-start gap-2 text-left">
                   <span className="text-slate-400 shrink-0 mt-0.5">{noteIcon}</span>
                   <span className="flex-1 min-w-0">
                     <span className="flex items-center gap-1.5">
@@ -289,12 +291,8 @@ export default function TackNotesPanel({
                       {resolveAuthor(note.created_by, note.team_id)} · {new Date(note.created_at).toLocaleDateString()}
                     </span>
                   </span>
-                  {renderNoteActions && (
-                    <span onClick={(e) => e.stopPropagation()} className="shrink-0">
-                      {renderNoteActions(note)}
-                    </span>
-                  )}
                 </button>
+                {renderNoteActions && <span className="shrink-0">{renderNoteActions(note)}</span>}
               </li>
             ))}
           </ul>
