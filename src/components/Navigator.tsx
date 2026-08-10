@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Link } from "@/i18n/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useParams } from "next/navigation";
+import { Link, useRouter } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTeam } from "@/contexts/TeamContext";
-import { useNoteEvents } from "@/contexts/NoteEventsContext";
+import { useNoteEvents, TackNoteTree, createTackNotesApi } from "@ullav-dev/tack-notes";
 import {
   createSpace,
   listNoteFolders,
@@ -18,7 +19,7 @@ import {
   type Space,
 } from "@/lib/tack-server-api";
 import PageTree from "@/components/PageTree";
-import NoteTree from "@/components/NoteTree";
+import TackNotesImagePicker from "@/components/TackNotesImagePicker";
 import RefreshControl from "@/components/RefreshControl";
 import Pager from "@/components/Pager";
 import { IconButton, editIcon, folderIcon, folderOpenIcon, noteIcon, pageIcon } from "@/components/Icon";
@@ -96,7 +97,11 @@ export default function Navigator() {
   const { token } = useAuth();
   const { activeTeam } = useTeam();
   const { triggerRefresh } = useNoteEvents();
+  const router = useRouter();
+  const params = useParams<{ noteId?: string }>();
   const t = useTranslations("navigator");
+  const tNotes = useTranslations("notes");
+  const api = useMemo(() => (token ? createTackNotesApi("/api", token) : null), [token]);
 
   const [activeTab, setActiveTabState] = useState<NavigatorTab>(loadStoredTab);
 
@@ -381,7 +386,21 @@ export default function Navigator() {
             <div className="px-4 pb-1 flex items-center justify-end">
               <RefreshControl onRefresh={triggerRefresh} storageKey="tack_notes_refresh_interval" />
             </div>
-            <NoteTree revealRequest={revealRequest} onRevealed={() => setRevealRequest(null)} />
+            {api && (
+              <TackNoteTree
+                api={api}
+                teamId={activeTeam?.id ?? null}
+                selectedNoteId={params.noteId}
+                buildNoteHref={(noteId) => `/notes/${noteId}`}
+                onNavigate={(noteId) => router.push(`/notes/${noteId}`)}
+                LinkComponent={Link}
+                t={t}
+                tNotes={tNotes}
+                ImagePicker={TackNotesImagePicker}
+                revealRequest={revealRequest}
+                onRevealed={() => setRevealRequest(null)}
+              />
+            )}
           </div>
         ) : (
           <div className="py-2">

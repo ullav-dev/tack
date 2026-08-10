@@ -1,41 +1,21 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Link, useRouter } from "@/i18n/navigation";
-import { useParams } from "next/navigation";
-import { useTranslations } from "next-intl";
-import { useAuth } from "@/contexts/AuthContext";
-import { useTeam } from "@/contexts/TeamContext";
-import { useNoteEvents } from "@/contexts/NoteEventsContext";
-import {
-  createNote,
-  createNoteFolder,
-  deleteNoteFolder,
-  listNoteFolders,
-  listNotes,
-  renameNoteFolder,
-  type Note,
-  type NoteFolder,
-  type Visibility,
-} from "@/lib/tack-server-api";
-import MarkdownComposer from "@/components/MarkdownComposer";
-import DeleteNoteFolderModal from "@/components/DeleteNoteFolderModal";
-import Pager from "@/components/Pager";
-import { IconButton, deleteIcon, editIcon, folderIcon, folderOpenIcon, noteIcon } from "@/components/Icon";
+import { useEffect, useRef, useState, type ComponentType } from "react";
+import { useNoteEvents } from "./NoteEventsContext";
+import type { Note, NoteFolder, TackNotesApi, Visibility } from "./api";
+import MarkdownComposer from "./MarkdownComposer";
+import DeleteNoteFolderModal from "./DeleteNoteFolderModal";
+import Pager from "./Pager";
+import { IconButton, deleteIcon, editIcon, folderIcon, folderOpenIcon, noteIcon } from "./Icon";
+import type { TFunction } from "./types";
 
 const PAGE_SIZE = 25;
 
 /** Sentinel key for the virtual "Default" folder -- every note filed
  * nowhere else lives here, so there is never a bare, un-contained note in
- * this tree (see this component's doc comment). Carries no `note_folders`
- * row of its own -- `folderOpts` maps it to `GET /notes?unfiled=true`,
- * exactly what the old real "unfiled" root list used. */
+ * this tree. */
 const DEFAULT_KEY = "__default__";
 
-/** The backend already returns folders `ORDER BY lower(name)`, but that
- * only covers one fetched page -- a freshly created folder needs the same
- * client-side re-sort (a create can land it on whatever page is currently
- * shown), and a rename didn't re-sort in place either. */
 function sortFolders(folders: NoteFolder[]): NoteFolder[] {
   return [...folders].sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -44,74 +24,69 @@ function totalPages(total: number): number {
   return Math.max(1, Math.ceil(total / PAGE_SIZE));
 }
 
-/** A real two-level folder browser for Notes: folders as expandable
- * containers (▾/▸ + a folder icon, hover-reveal rename/delete, same shape
- * as PageTree's page rows), each lazily loaded on first expand.
- *
- * Every note lives inside a folder row -- there is no bare root-level note
- * list anymore. A note filed nowhere else lives in the always-present
- * virtual "Default" folder (`DEFAULT_KEY`, pinned first, no rename/delete
- * since it has no real `note_folders` row behind it) rather than sitting
- * loose at the tree's root the way an earlier version did -- that read as
- * genuinely messier (an implicit "everything else" bucket with no visible
- * home) than one more always-visible folder row. "+ Add note" follows from
- * this directly: since every note is created *into* some folder (Default
- * included), the action lives inside whichever folder row you're looking
- * at, not as a single global button that has to silently pick a target.
- * "+ Add folder" is the one tree-level (not per-folder) action, so it sits
- * at the very top, ahead of the folder list, not mixed in among per-folder
- * actions at the bottom.
- *
- * Both the folder list itself and each folder's note list are real,
- * server-paginated pages (`Pager`, `limit`/`offset`/`total`) -- not a
- * "Load more" that grows forever, and not skipped on the folder list just
- * because folder counts are usually small ("who knows the use cases... if
- * a lot it is needed" -- the standing rule for every list in this app, not
- * a case-by-case guess). A folder's own contents load only once it's
- * expanded; the folder list itself loads on mount (it's cheap metadata,
- * not note content).
- *
- * A note's folder change (via NoteThread) is applied here by a full local
- * resync (refetch the folder list + every currently-expanded folder's
- * *current page*) rather than trying to surgically relocate the note
- * client-side -- an earlier version tried the surgical approach and
- * silently dropped the note when its old folder had never been expanded
- * (so wasn't cached locally) -- "moving a note to Unfiled doesn't work" was
- * a direct symptom of that. The resync costs one extra round-trip per move;
- * correctness in every case is worth it here.
- *
- * Not yet factored into an embeddable local package (see this repo's
- * CLAUDE.md, "Build for reuse") -- this component talks directly to
- * `useAuth`/`useTeam`/`useNoteEvents`/`tack-server-api`, which is exactly
- * the boundary a `packages/`-style extraction (mirroring `dam-picker`)
- * would need to take as injected props/a passed-in client instead, so
- * another app's own auth/team context can drive it. Marked here rather than
- * attempted here -- that's a separate, deliberate PR. Icons (`Icon.tsx`)
- * and `Pager` are shared with NoteThread/PageTree/Navigator already, a
- * concrete step in that direction. */
-interface Props {
-  /** Set by Navigator when a search result's "view in folder" action is
-   * clicked -- expands the note's folder (DEFAULT_KEY if unfiled) and
-   * navigates to it, so a note found via search can be seen in its real
-   * tree context instead of only in isolation. `folderId: null` means the
-   * note is unfiled (lands in the virtual Default folder), same convention
-   * `SearchHit.folder_id` already uses. Cleared via `onRevealed` once
-   * handled -- Navigator owns the request's lifetime, not this component,
-   * since the request can arrive before NoteTree is even mounted (switching
-   * from the Spaces tab). */
+export interface TackNoteTreeProps {
+  api: TackNotesApi;
+  /** The active scope to browse notes/folders within -- whatever a host
+   * app's own team/workspace switcher currently has selected. `null` shows
+   * a "select a team first" message instead of fetching anything. */
+  teamId: string | null;
+  /** The currently-selected note's id, if the host app's own routing has
+   * one open (drives the "selected" highlight on a note row) -- e.g. a
+   * Next.js app would pass its own route param here. */
+  selectedNoteId?: string;
+  /** Builds the href for a note row's link -- the host app's own route
+   * shape (e.g. `/notes/:id` here in tack, something else entirely
+   * elsewhere). */
+  buildNoteHref: (noteId: string) => string;
+  /** Imperative navigation after creating a note or handling a
+   * `revealRequest` -- not every host app uses the same router. */
+  onNavigate: (noteId: string) => void;
+  /** Defaults to a plain `<a>`. Pass e.g. Next's `Link` (or an
+   * `next-intl`-wrapped one) for client-side navigation. */
+  LinkComponent?: ComponentType<{ href: string; className?: string; children: React.ReactNode }>;
+  /** Calls `t("navigator")` namespace keys. */
+  t: TFunction;
+  /** Calls `t("notes")` namespace keys (title placeholder, visibility
+   * options, save/cancel -- shared with the inline note composer). */
+  tNotes: TFunction;
+  ImagePicker?: ComponentType<{ onSelect: (asset: { url: string; name: string }) => void; onClose: () => void }>;
+  /** Set by a host app's search UI when a search result's "view in folder"
+   * action is clicked -- expands the note's folder (DEFAULT_KEY if
+   * unfiled) and navigates to it. `folderId: null` means the note is
+   * unfiled. Cleared via `onRevealed` once handled. */
   revealRequest?: { noteId: string; folderId: string | null } | null;
   onRevealed?: () => void;
 }
 
-export default function NoteTree({ revealRequest, onRevealed }: Props = {}) {
-  const { token } = useAuth();
-  const { activeTeam } = useTeam();
-  const router = useRouter();
+const DefaultAnchor: ComponentType<{ href: string; className?: string; children: React.ReactNode }> = ({ href, className, children }) => (
+  <a href={href} className={className}>
+    {children}
+  </a>
+);
+
+/** A real two-level folder browser for Notes -- extracted from `tack`'s own
+ * `NoteTree.tsx` (see that file's original doc comment, preserved in git
+ * history, for the full design rationale: the always-present virtual
+ * Default folder, server-side pagination throughout, the full-resync
+ * strategy on a folder move). Every tack-specific dependency (auth, the
+ * active team, routing, next-intl, the API base) is now a prop -- this is
+ * the deferred "packages/-style extraction" the original file's doc
+ * comment named as future work. */
+export default function TackNoteTree({
+  api,
+  teamId,
+  selectedNoteId,
+  buildNoteHref,
+  onNavigate,
+  LinkComponent,
+  t,
+  tNotes,
+  ImagePicker,
+  revealRequest,
+  onRevealed,
+}: TackNoteTreeProps) {
+  const Link = LinkComponent ?? DefaultAnchor;
   const { subscribe, subscribeDeleted, subscribeRefresh } = useNoteEvents();
-  const t = useTranslations("navigator");
-  const tNotes = useTranslations("notes");
-  const params = useParams<{ noteId?: string }>();
-  const selectedNoteId = params.noteId;
 
   const [folders, setFolders] = useState<NoteFolder[] | null>(null);
   const [foldersTotal, setFoldersTotal] = useState(0);
@@ -119,7 +94,6 @@ export default function NoteTree({ revealRequest, onRevealed }: Props = {}) {
   const [foldersError, setFoldersError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
-  // Keyed by folder id, or DEFAULT_KEY for the virtual Default folder.
   const [notesByKey, setNotesByKey] = useState<Record<string, Note[]>>({});
   const [totalByKey, setTotalByKey] = useState<Record<string, number>>({});
   const [pageByKey, setPageByKey] = useState<Record<string, number>>({});
@@ -136,9 +110,6 @@ export default function NoteTree({ revealRequest, onRevealed }: Props = {}) {
 
   const [deletingFolder, setDeletingFolder] = useState<NoteFolder | null>(null);
 
-  // Which key (a real folder id, or DEFAULT_KEY) is currently showing the
-  // inline note composer, if any -- only one at a time, mirrors PageTree's
-  // `creatingUnder`.
   const [composingUnder, setComposingUnder] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState("");
   const [newBody, setNewBody] = useState("");
@@ -154,10 +125,10 @@ export default function NoteTree({ revealRequest, onRevealed }: Props = {}) {
   }
 
   async function fetchNotes(key: string, generation: number, page: number) {
-    if (!token || !activeTeam) return;
+    if (!teamId) return;
     setLoadingKeys((prev) => new Set(prev).add(key));
     try {
-      const result = await listNotes(token, activeTeam.id, {
+      const result = await api.listNotes(teamId, {
         limit: PAGE_SIZE,
         offset: (page - 1) * PAGE_SIZE,
         ...folderOpts(key),
@@ -171,10 +142,6 @@ export default function NoteTree({ revealRequest, onRevealed }: Props = {}) {
     } catch (e) {
       if (generation === generationRef.current) setNotesError((e as Error).message);
     } finally {
-      // Unconditional (not gated on `generation === generationRef.current`):
-      // a resync bumps the generation for every in-flight load, and gating
-      // this left a section stuck "loading" forever after a mid-flight
-      // resync.
       setLoadingKeys((prev) => {
         const next = new Set(prev);
         next.delete(key);
@@ -184,9 +151,9 @@ export default function NoteTree({ revealRequest, onRevealed }: Props = {}) {
   }
 
   async function fetchFolders(generation: number, page: number) {
-    if (!token || !activeTeam) return;
+    if (!teamId) return;
     try {
-      const result = await listNoteFolders(token, activeTeam.id, { limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE });
+      const result = await api.listNoteFolders(teamId, { limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE });
       if (generation !== generationRef.current) return;
       setFolders(sortFolders(result.folders));
       setFoldersTotal(result.total);
@@ -196,23 +163,13 @@ export default function NoteTree({ revealRequest, onRevealed }: Props = {}) {
     }
   }
 
-  /** Full local resync: the folder list (at its current page, for
-   * note_count badges) plus every folder that's actually expanded right
-   * now (at *its* current page). See this component's doc comment for why
-   * a folder move triggers this instead of a surgical client-side
-   * relocation. */
   async function resync() {
     generationRef.current += 1;
     const generation = generationRef.current;
     await fetchFolders(generation, foldersPage);
-    await Promise.all(
-      Array.from(expanded).map((key) => fetchNotes(key, generation, pageByKeyRef.current[key] ?? 1))
-    );
+    await Promise.all(Array.from(expanded).map((key) => fetchNotes(key, generation, pageByKeyRef.current[key] ?? 1)));
   }
 
-  // Only the folder list itself loads on mount/team switch -- cheap
-  // metadata (names + counts), not note content. No folder's notes load
-  // (including Default's) until that row is actually expanded.
   useEffect(() => {
     generationRef.current += 1;
     const generation = generationRef.current;
@@ -228,9 +185,10 @@ export default function NoteTree({ revealRequest, onRevealed }: Props = {}) {
     setFoldersTotal(0);
     setFoldersPage(1);
     setFoldersError(null);
-    if (!token || !activeTeam) return;
+    if (!teamId) return;
     fetchFolders(generation, 1);
-  }, [token, activeTeam]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teamId]);
 
   function toggleFolder(key: string) {
     setExpanded((prev) => {
@@ -245,19 +203,6 @@ export default function NoteTree({ revealRequest, onRevealed }: Props = {}) {
     });
   }
 
-  // NoteThread broadcasts metadata changes (title edits, folder moves)
-  // through this shared pub/sub. A title-only patch is applied in place; a
-  // folder move triggers a full resync (see doc comment above).
-  //
-  // `subscribe` itself is a stable reference (useCallback([]) in
-  // NoteEventsContext), so `token`/`activeTeam` MUST be explicit deps here,
-  // not left off with an exhaustive-deps override -- without them, this
-  // effect only ever runs once, at first mount, permanently registering a
-  // callback whose closed-over `resync` (via `token`/`activeTeam`) is
-  // whatever they were before auth/team even resolved. Every subsequent
-  // folder move then silently no-ops inside `fetchNotes`'s
-  // `if (!token || !activeTeam) return` guard -- "moving a note has no
-  // effect until a page refresh" was this bug, exactly.
   useEffect(() => {
     return subscribe((noteId, patch) => {
       if ("folder_id" in patch) {
@@ -265,64 +210,45 @@ export default function NoteTree({ revealRequest, onRevealed }: Props = {}) {
         return;
       }
       const next = Object.fromEntries(
-        Object.entries(notesByKeyRef.current).map(([key, notes]) => [
-          key,
-          notes.map((n) => (n.id === noteId ? { ...n, ...patch } : n)),
-        ])
+        Object.entries(notesByKeyRef.current).map(([key, notes]) => [key, notes.map((n) => (n.id === noteId ? { ...n, ...patch } : n))])
       );
       notesByKeyRef.current = next;
       setNotesByKey(next);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subscribe, token, activeTeam]);
+  }, [subscribe, teamId]);
 
   useEffect(() => {
     return subscribeDeleted((noteId) => {
-      const next = Object.fromEntries(
-        Object.entries(notesByKeyRef.current).map(([key, notes]) => [key, notes.filter((n) => n.id !== noteId)])
-      );
+      const next = Object.fromEntries(Object.entries(notesByKeyRef.current).map(([key, notes]) => [key, notes.filter((n) => n.id !== noteId)]));
       notesByKeyRef.current = next;
       setNotesByKey(next);
     });
   }, [subscribeDeleted]);
 
-  // Driven by the shared RefreshControl in the Navigator.
   useEffect(() => {
     return subscribeRefresh(resync);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subscribeRefresh, token, activeTeam]);
+  }, [subscribeRefresh, teamId]);
 
-  // Handles Navigator's "view in folder" search-result action. Runs after
-  // the mount-reset effect above (declared later, same commit), so
-  // `notesByKeyRef.current` has already been cleared for a fresh
-  // team/token before this checks it. Doesn't try to jump to the exact
-  // page containing the note -- the notes list has no "which page is note
-  // X on" query, and paging manually from an expanded, correctly-scrolled
-  // folder is a reasonable landing point; this at least gets the folder
-  // open, on-screen, and the note itself selected/highlighted if it
-  // happens to be on the loaded first page.
   useEffect(() => {
-    if (!revealRequest || !token || !activeTeam) return;
+    if (!revealRequest || !teamId) return;
     const key = revealRequest.folderId ?? DEFAULT_KEY;
     setExpanded((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
     if (!notesByKeyRef.current[key]) fetchNotes(key, generationRef.current, 1);
-    router.push(`/notes/${revealRequest.noteId}`);
+    onNavigate(revealRequest.noteId);
     document.getElementById(`note-folder-${key}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     onRevealed?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [revealRequest, token, activeTeam]);
+  }, [revealRequest, teamId]);
 
   async function handleCreateFolder() {
     const name = newFolderName.trim();
-    if (!token || !activeTeam || !name || savingFolder) return;
+    if (!teamId || !name || savingFolder) return;
     setSavingFolder(true);
     setFoldersError(null);
     try {
-      await createNoteFolder(token, { team_id: activeTeam.id, name });
-      // A new folder can land anywhere alphabetically, possibly on a
-      // different page than the one currently shown -- simplest correct
-      // behavior is to jump back to page 1 and refetch, rather than
-      // guessing whether it belongs on the current page.
+      await api.createNoteFolder({ team_id: teamId, name });
       generationRef.current += 1;
       await fetchFolders(generationRef.current, 1);
       setCreatingFolder(false);
@@ -342,18 +268,14 @@ export default function NoteTree({ revealRequest, onRevealed }: Props = {}) {
   async function handleRename(folder: NoteFolder) {
     const name = renameDraft.trim();
     if (renaming) return;
-    // Blurring with an empty (or unchanged) draft just closes the input.
-    if (!token || !name || name === folder.name) {
+    if (!name || name === folder.name) {
       setRenamingId(null);
       return;
     }
     setRenaming(true);
     setFoldersError(null);
     try {
-      await renameNoteFolder(token, folder.id, name);
-      // Same reasoning as create: a rename can move a folder to a
-      // different page -- refetch the current page rather than patching
-      // in place and hoping it's still correctly positioned.
+      await api.renameNoteFolder(folder.id, name);
       generationRef.current += 1;
       await fetchFolders(generationRef.current, foldersPage);
       setRenamingId(null);
@@ -365,8 +287,7 @@ export default function NoteTree({ revealRequest, onRevealed }: Props = {}) {
   }
 
   async function handleDeleteFolder(folder: NoteFolder) {
-    if (!token) return;
-    await deleteNoteFolder(token, folder.id);
+    await api.deleteNoteFolder(folder.id);
     setExpanded((prev) => {
       const next = new Set(prev);
       next.delete(folder.id);
@@ -378,15 +299,9 @@ export default function NoteTree({ revealRequest, onRevealed }: Props = {}) {
     setNotesByKey(next);
     generationRef.current += 1;
     const generation = generationRef.current;
-    // A deleted folder can leave the current page short a row (or empty) --
-    // re-clamp to the last valid page rather than assuming the current one
-    // is still in range.
     const remaining = foldersTotal - 1;
     const targetPage = Math.min(foldersPage, totalPages(remaining));
     await fetchFolders(generation, targetPage);
-    // The folder's notes fall back into Default server-side -- refetch it
-    // (if it's been expanded) so they actually appear there instead of
-    // just vanishing from view.
     if (expanded.has(DEFAULT_KEY)) {
       await fetchNotes(DEFAULT_KEY, generation, pageByKeyRef.current[DEFAULT_KEY] ?? 1);
     }
@@ -394,30 +309,25 @@ export default function NoteTree({ revealRequest, onRevealed }: Props = {}) {
   }
 
   async function handleCreateNote(key: string) {
-    if (!token || !activeTeam || !newTitle.trim() || !newBody.trim() || creatingNote) return;
+    if (!teamId || !newTitle.trim() || !newBody.trim() || creatingNote) return;
     setCreatingNote(true);
     try {
-      const note = await createNote(token, {
-        team_id: activeTeam.id,
+      const note = await api.createNote({
+        team_id: teamId,
         visibility: newVisibility,
         title: newTitle.trim(),
         body_markdown: newBody.trim(),
         folder_id: key === DEFAULT_KEY ? undefined : key,
       });
-      // A new note is newest-first, so it always lands on page 1 of its
-      // folder -- jump there rather than trying to splice it into whatever
-      // page is currently shown.
       generationRef.current += 1;
       const generation = generationRef.current;
       await fetchNotes(key, generation, 1);
-      // Filing a new note into a real folder changes that folder's
-      // note_count -- Default has no count badge to keep in sync.
       if (key !== DEFAULT_KEY) await fetchFolders(generation, foldersPage);
       setComposingUnder(null);
       setNewTitle("");
       setNewBody("");
       setNewVisibility("private");
-      router.push(`/notes/${note.id}`);
+      onNavigate(note.id);
     } catch (e) {
       setNotesError((e as Error).message);
     } finally {
@@ -435,7 +345,7 @@ export default function NoteTree({ revealRequest, onRevealed }: Props = {}) {
           onChange={(e) => setNewTitle(e.target.value)}
           placeholder={tNotes("titlePlaceholder")}
           disabled={creatingNote}
-          className="w-full text-sm rounded border border-slate-200 px-2 py-1 focus:border-rose-400 focus:outline-none focus:ring-1 focus:ring-rose-400"
+          className="w-full text-sm rounded border border-slate-200 px-2 py-1 focus:border-[var(--tnotes-400,#fb7185)] focus:outline-none focus:ring-1 focus:ring-[var(--tnotes-400,#fb7185)]"
         />
         <select
           value={newVisibility}
@@ -447,7 +357,7 @@ export default function NoteTree({ revealRequest, onRevealed }: Props = {}) {
           <option value="team">{tNotes("visibility.team")}</option>
           <option value="organization">{tNotes("visibility.organization")}</option>
         </select>
-        <MarkdownComposer value={newBody} onChange={setNewBody} disabled={creatingNote} rows={4} />
+        <MarkdownComposer value={newBody} onChange={setNewBody} disabled={creatingNote} rows={4} t={tNotes} ImagePicker={ImagePicker} />
         <div className="flex justify-end gap-2">
           <button
             type="button"
@@ -464,7 +374,7 @@ export default function NoteTree({ revealRequest, onRevealed }: Props = {}) {
             type="button"
             onClick={() => handleCreateNote(key)}
             disabled={creatingNote || !newTitle.trim() || !newBody.trim()}
-            className="text-xs bg-rose-700 hover:bg-rose-800 disabled:opacity-50 text-white px-3 py-1 rounded"
+            className="text-xs bg-[var(--tnotes-700,#be123c)] hover:bg-[var(--tnotes-800,#9f1239)] disabled:opacity-50 text-white px-3 py-1 rounded"
           >
             {creatingNote ? tNotes("saving") : tNotes("save")}
           </button>
@@ -473,13 +383,6 @@ export default function NoteTree({ revealRequest, onRevealed }: Props = {}) {
     );
   }
 
-  /** Renders one folder's note rows, its pager, and its own "+ Add note"
-   * affordance -- nesting under the folder row is done by the *caller*
-   * wrapping this in an indent+guide container, not by this function
-   * computing a depth-scaled padding itself (see the folder-row render
-   * below for why: a folder's own label, past its chevron and icon,
-   * previously ended up starting to the *right* of its children's text
-   * when indentation was padding-only). */
   function renderFolderContents(key: string) {
     const notes = notesByKey[key];
     const loading = loadingKeys.has(key);
@@ -491,31 +394,22 @@ export default function NoteTree({ revealRequest, onRevealed }: Props = {}) {
           return (
             <Link
               key={note.id}
-              href={`/notes/${note.id}`}
+              href={buildNoteHref(note.id)}
               className={`flex items-center gap-1.5 rounded px-2 py-1 text-sm ${
-                isSelected ? "bg-rose-50 text-rose-700 font-medium" : "text-slate-700 hover:bg-slate-100"
+                isSelected ? "bg-[var(--tnotes-50,#fff1f2)] text-[var(--tnotes-700,#be123c)] font-medium" : "text-slate-700 hover:bg-slate-100"
               }`}
             >
-              <span className={`shrink-0 ${isSelected ? "text-rose-400" : "text-slate-300"}`}>{noteIcon}</span>
+              <span className={`shrink-0 ${isSelected ? "text-[var(--tnotes-400,#fb7185)]" : "text-slate-300"}`}>{noteIcon}</span>
               <span className="truncate">{note.title || t("untitledNote")}</span>
             </Link>
           );
         })}
         {notes?.length === 0 && <p className="text-xs text-slate-400 px-2 py-1">{t("noNotes")}</p>}
         {loading && notes && notes.length > 0 && <p className="text-xs text-slate-400 px-2 py-1">{t("loading")}</p>}
-        <Pager
-          page={pageByKey[key] ?? 1}
-          totalPages={totalPages(totalByKey[key] ?? 0)}
-          onChange={(page) => fetchNotes(key, generationRef.current, page)}
-          disabled={loading}
-        />
+        <Pager page={pageByKey[key] ?? 1} totalPages={totalPages(totalByKey[key] ?? 0)} onChange={(page) => fetchNotes(key, generationRef.current, page)} disabled={loading} t={t} />
         {renderComposer(key)}
         {composingUnder !== key && (
-          <button
-            type="button"
-            onClick={() => setComposingUnder(key)}
-            className="block px-2 py-1 text-xs font-medium text-rose-700 hover:underline"
-          >
+          <button type="button" onClick={() => setComposingUnder(key)} className="block px-2 py-1 text-xs font-medium text-[var(--tnotes-700,#be123c)] hover:underline">
             + {t("newNote")}
           </button>
         )}
@@ -538,7 +432,7 @@ export default function NoteTree({ revealRequest, onRevealed }: Props = {}) {
             }}
             onBlur={() => handleRename(folder)}
             disabled={renaming}
-            className="w-full text-sm rounded border border-slate-200 px-1.5 py-0.5 focus:border-rose-400 focus:outline-none"
+            className="w-full text-sm rounded border border-slate-200 px-1.5 py-0.5 focus:border-[var(--tnotes-400,#fb7185)] focus:outline-none"
           />
         </div>
       );
@@ -546,11 +440,7 @@ export default function NoteTree({ revealRequest, onRevealed }: Props = {}) {
     return (
       <div key={id} id={`note-folder-${id}`}>
         <div className="group flex items-center gap-1 rounded px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-100">
-          <button
-            type="button"
-            onClick={() => toggleFolder(id)}
-            className="flex flex-1 min-w-0 items-center gap-1.5 text-left font-medium"
-          >
+          <button type="button" onClick={() => toggleFolder(id)} className="flex flex-1 min-w-0 items-center gap-1.5 text-left font-medium">
             <span className="shrink-0 w-3 text-xs text-slate-400">{isExpanded ? "▾" : "▸"}</span>
             <span className="shrink-0 text-slate-400">{isExpanded ? folderOpenIcon : folderIcon}</span>
             <span className="truncate">{name}</span>
@@ -572,16 +462,13 @@ export default function NoteTree({ revealRequest, onRevealed }: Props = {}) {
     );
   }
 
-  if (!activeTeam) return <p className="px-2 py-1 text-xs text-slate-400">{t("selectTeamFirst")}</p>;
+  if (!teamId) return <p className="px-2 py-1 text-xs text-slate-400">{t("selectTeamFirst")}</p>;
 
   return (
     <div>
       {foldersError && <p className="px-2 py-1 text-xs text-red-600">{foldersError}</p>}
       {notesError && <p className="px-2 py-1 text-xs text-red-600">{notesError}</p>}
 
-      {/* The one tree-level (not per-folder) create action -- pinned at the
-          very top, ahead of the folder list, so it doesn't read as one more
-          item mixed in among per-folder actions further down. */}
       {creatingFolder ? (
         <div className="px-2 py-1">
           <input
@@ -600,33 +487,20 @@ export default function NoteTree({ revealRequest, onRevealed }: Props = {}) {
             }}
             disabled={savingFolder}
             placeholder={t("newFolderName")}
-            className="w-full text-sm rounded border border-slate-200 px-1.5 py-0.5 focus:border-rose-400 focus:outline-none"
+            className="w-full text-sm rounded border border-slate-200 px-1.5 py-0.5 focus:border-[var(--tnotes-400,#fb7185)] focus:outline-none"
           />
         </div>
       ) : (
-        <button
-          type="button"
-          onClick={() => setCreatingFolder(true)}
-          className="w-full text-left px-2.5 py-1 text-xs font-medium text-rose-700 hover:underline"
-        >
+        <button type="button" onClick={() => setCreatingFolder(true)} className="w-full text-left px-2.5 py-1 text-xs font-medium text-[var(--tnotes-700,#be123c)] hover:underline">
           + {t("newFolder")}
         </button>
       )}
 
-      {/* Default is always here, pinned first, before any real folders --
-          every note lives in some folder, this is where one lands with no
-          explicit choice made. Rendered outside the paginated folder list
-          -- it isn't a real note_folders row, so it isn't part of what
-          `foldersTotal`/`foldersPage` counts. */}
       {renderFolderRow(DEFAULT_KEY, t("defaultFolder"), null, null)}
 
       {!folders && !foldersError && <p className="px-2 py-1 text-xs text-slate-400">{t("loading")}</p>}
       {folders?.map((folder) => renderFolderRow(folder.id, folder.name, folder.note_count, folder))}
-      <Pager
-        page={foldersPage}
-        totalPages={totalPages(foldersTotal)}
-        onChange={(page) => fetchFolders(generationRef.current, page)}
-      />
+      <Pager page={foldersPage} totalPages={totalPages(foldersTotal)} onChange={(page) => fetchFolders(generationRef.current, page)} t={t} />
 
       {deletingFolder && (
         <DeleteNoteFolderModal
@@ -634,6 +508,7 @@ export default function NoteTree({ revealRequest, onRevealed }: Props = {}) {
           noteCount={deletingFolder.note_count}
           onConfirm={() => handleDeleteFolder(deletingFolder)}
           onCancel={() => setDeletingFolder(null)}
+          t={t}
         />
       )}
     </div>

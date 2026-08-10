@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useRef } from "react";
-import type { Note } from "@/lib/tack-server-api";
+import type { Note } from "./api";
 
 type Listener = (noteId: string, patch: Partial<Note>) => void;
 type DeleteListener = (noteId: string) => void;
@@ -14,26 +14,21 @@ interface NoteEventsContextValue {
   subscribeDeleted: (listener: DeleteListener) => () => void;
   /** Register to be re-fetched when the shared refresh timer/button fires. */
   subscribeRefresh: (listener: RefreshListener) => () => void;
-  /** Fires every registered refresh listener and resolves once they've all settled. */
+  /** Fires every registered refresh listener and resolves once they've all
+   * settled -- call this from a host app's own refresh control, if it has
+   * one (tack's own `RefreshControl` does). */
   triggerRefresh: () => Promise<void>;
 }
 
 const NoteEventsContext = createContext<NoteEventsContextValue | null>(null);
 
-/** Same small pub/sub shape as `PageEventsContext` (see that file for the
- * full rationale) — NoteTree (left panel) needs to learn about a title
- * edit made in NoteThread (right panel); they're siblings with no other
- * shared state. Kept as its own separate context rather than generalizing
- * `PageEventsContext` to cover both content types, matching this codebase's
- * preference for a second small copy over a premature shared abstraction.
- *
- * Also carries a deletion pub/sub (NoteTree drops a note from its cached
- * list the moment it's deleted in NoteThread, rather than waiting for the
- * next refresh tick), and a second, independent pub/sub for the shared
- * auto/manual refresh timer: one `RefreshControl` lives in the Navigator
- * (always mounted, unlike NoteThread which unmounts per note) and drives
- * both the Notes list and whichever note thread is currently open from a
- * single timer/button, rather than each panel running its own. */
+/** `TackNoteThread` (title/folder edits, deletions) and `TackNoteTree` (the
+ * list that needs to react to them) are siblings with no other shared
+ * state -- this is the pub/sub between them, extracted verbatim out of
+ * `tack`'s own `NoteEventsContext`. Bundled as this package's own internal
+ * wiring: a host app wraps both panels in `NoteEventsProvider` once and
+ * otherwise never touches this context, except via `useNoteEvents()` if it
+ * wants to drive `triggerRefresh` from its own refresh control. */
 export function NoteEventsProvider({ children }: { children: React.ReactNode }) {
   const listenersRef = useRef<Set<Listener>>(new Set());
   const deleteListenersRef = useRef<Set<DeleteListener>>(new Set());

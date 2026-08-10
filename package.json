@@ -17,6 +17,7 @@
     "@tiptap/extension-table": "^3.29.0",
     "@tiptap/react": "^3.29.0",
     "@tiptap/starter-kit": "^3.29.0",
+    "@ullav-dev/tack-notes": "file:./packages/tack-notes",
     "@ullav/dam-picker": "file:./packages/dam-picker",
     "next": "16.1.6",
     "next-intl": "^4.9.0",
