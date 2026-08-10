@@ -1,41 +1,31 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useTranslations } from "next-intl";
-import { useAuth } from "@/contexts/AuthContext";
-import { deleteRevision, listReplies, listRevisions, type Note, type NoteRevision } from "@/lib/tack-server-api";
-import NoteMarkdown from "@/components/NoteMarkdown";
-import ResizableSplit from "@/components/ResizableSplit";
+import type { Note, NoteRevision, TackNotesApi } from "./api";
+import NoteMarkdown from "./NoteMarkdown";
+import ResizableSplit from "./ResizableSplit";
+import type { TFunction } from "./types";
 
 interface Props {
+  api: TackNotesApi;
   noteId: string;
-  /** The note's (or reply's) own title, shown in the header so it's clear
-   * which note's history this is -- the drawer otherwise carries no
-   * identifying text of its own. Empty/omitted for a reply, which never has
-   * its own title. */
+  /** The note's (or reply's) own title, shown in the header. Empty/omitted
+   * for a reply, which never has its own title. */
   title?: string;
   canEdit: boolean;
   /** The note's own replies, if any -- passed down so each version can show
-   * only the replies that were made while it was current (see
-   * `in_reply_to_version` on `Note`). Omitted for a reply's own history
-   * drawer, since replies don't have their own sub-replies. */
+   * only the replies that were made while it was current. Omitted for a
+   * reply's own history drawer. */
   replies?: Note[];
   onClose: () => void;
-  /** Lets the parent (which fetches its own copy of `revisions` for the
-   * "Version N" badge) stay in sync when a version is deleted in here,
-   * without a full refetch. */
   onRevisionsChanged?: (revisions: NoteRevision[]) => void;
-  /** Same idea, for replies: deleting a version can reassign replies tagged
-   * to it (see tack-server's `delete_revision`), so the parent's own
-   * `replies` state needs to pick up the new tags too, not just this
-   * drawer's local copy used for filtering. */
   onRepliesChanged?: (replies: Note[]) => void;
-  /** Makes the selected version the one shown in the main note/reply view
-   * (read-only, alongside that version's own scoped replies) instead of the
-   * live current state. Omitted for a reply's own history drawer -- a
-   * reply's inline view doesn't currently support "viewing an old version"
-   * the way the top-level note does. */
   onSelectVersion?: (revision: NoteRevision) => void;
+  /** Calls `t("versionHistory")`, `t("close")`, `t("loading")`,
+   * `t("version", { n })`, `t("delete")`, `t("deleteVersionConfirm")`,
+   * `t("deleteCancel")`, `t("saving")`, `t("viewThisVersion")`,
+   * `t("noVersions")`. */
+  t: TFunction;
 }
 
 function Icon({ children }: { children: React.ReactNode }) {
@@ -53,30 +43,10 @@ const deleteIcon = (
   </Icon>
 );
 
-/** Revision history drawer for a Note — `GET /notes/:id/revisions` is
- * fully supported server-side today; a revision is only created when the
- * note owner explicitly clicks "Save as version" (`POST
- * /notes/:id/revisions`), not automatically on every edit. Unlike Pages,
- * which need backend step 8c (named-snapshot history) before an equivalent
- * view is possible there.
- *
- * The list/content split uses the same `ResizableSplit` as the workspace's
- * own Navigator, with `maxWidth={Infinity}` -- `Math.min(Infinity, x)` is
- * just `x`, so the list column has no upper clamp. The drawer's own outer
- * width is widened (not the old fixed `max-w-lg`) so that resize has
- * meaningful room to work with. */
-export default function VersionHistory({
-  noteId,
-  title,
-  canEdit,
-  replies,
-  onClose,
-  onRevisionsChanged,
-  onRepliesChanged,
-  onSelectVersion,
-}: Props) {
-  const { token } = useAuth();
-  const t = useTranslations("notes");
+/** Revision history drawer for a Note -- extracted from `tack`'s own
+ * `VersionHistory.tsx`, decoupled from `useAuth`/`tack-server-api` (takes
+ * `api` instead) and `next-intl` (takes `t` instead). */
+export default function VersionHistory({ api, noteId, title, canEdit, replies, onClose, onRevisionsChanged, onRepliesChanged, onSelectVersion, t }: Props) {
   const [revisions, setRevisions] = useState<NoteRevision[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<NoteRevision | null>(null);
@@ -84,9 +54,9 @@ export default function VersionHistory({
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    if (!token) return;
     let cancelled = false;
-    listRevisions(token, noteId)
+    api
+      .listRevisions(noteId)
       .then((r) => {
         if (cancelled) return;
         setRevisions(r);
@@ -98,23 +68,20 @@ export default function VersionHistory({
     return () => {
       cancelled = true;
     };
-  }, [token, noteId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [noteId]);
 
   async function handleDelete(revisionId: string) {
-    if (!token) return;
     setDeleting(true);
     try {
-      await deleteRevision(token, noteId, revisionId);
+      await api.deleteRevision(noteId, revisionId);
       const next = (revisions ?? []).filter((r) => r.id !== revisionId);
       setRevisions(next);
       onRevisionsChanged?.(next);
       if (selected?.id === revisionId) setSelected(next[0] ?? null);
       setConfirmingDeleteId(null);
-      // Deleting a version can reassign replies that were tagged to it (see
-      // tack-server's delete_revision) -- refetch so both this drawer's own
-      // filtering and the parent's cached list pick up the new tags.
       if (replies) {
-        const updatedReplies = await listReplies(token, noteId);
+        const updatedReplies = await api.listReplies(noteId);
         onRepliesChanged?.(updatedReplies);
       }
     } catch (e) {
@@ -124,10 +91,6 @@ export default function VersionHistory({
     }
   }
 
-  // A version's own replies -- those made while it was the latest saved
-  // version. A reply with no recorded context (created before this field
-  // existed) is treated as belonging to whichever version is currently
-  // newest, matching its old always-visible behavior.
   const latestVersion = revisions?.[0]?.version ?? null;
   const selectedReplies = selected
     ? (replies ?? []).filter((r) =>
@@ -137,10 +100,7 @@ export default function VersionHistory({
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end bg-black/20 print:hidden" onClick={onClose}>
-      <div
-        className="w-full max-w-[90vw] h-full bg-white shadow-xl flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="w-full max-w-[90vw] h-full bg-white shadow-xl flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 shrink-0">
           <div className="min-w-0">
             <h2 className="font-semibold text-slate-800">{t("versionHistory")}</h2>
@@ -162,12 +122,12 @@ export default function VersionHistory({
               left={
                 <div className="border-r border-slate-200 h-full py-2">
                   {revisions.map((rev) => (
-                    <div key={rev.id} className={`flex items-center gap-1 px-2 ${selected?.id === rev.id ? "bg-rose-50" : ""}`}>
+                    <div key={rev.id} className={`flex items-center gap-1 px-2 ${selected?.id === rev.id ? "bg-[var(--tnotes-50,#fff1f2)]" : ""}`}>
                       <button
                         type="button"
                         onClick={() => setSelected(rev)}
                         className={`flex-1 min-w-0 text-left px-1 py-1.5 text-xs ${
-                          selected?.id === rev.id ? "text-rose-700 font-medium" : "text-slate-600 hover:bg-slate-50"
+                          selected?.id === rev.id ? "text-[var(--tnotes-700,#be123c)] font-medium" : "text-slate-600 hover:bg-slate-50"
                         }`}
                       >
                         {t("version", { n: rev.version })}
@@ -221,7 +181,7 @@ export default function VersionHistory({
                             onSelectVersion(selected);
                             onClose();
                           }}
-                          className="text-xs font-medium text-rose-700 hover:text-rose-900 border border-rose-200 hover:border-rose-300 rounded px-2 py-1"
+                          className="text-xs font-medium text-[var(--tnotes-700,#be123c)] hover:text-[var(--tnotes-900,#881337)] border border-[var(--tnotes-200,#fecdd3)] hover:border-[var(--tnotes-300,#fda4af)] rounded px-2 py-1"
                         >
                           {t("viewThisVersion")}
                         </button>

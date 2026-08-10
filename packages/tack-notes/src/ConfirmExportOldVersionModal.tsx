@@ -1,21 +1,21 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import type { TFunction } from "./types";
 
 interface Props {
   version: number;
   onConfirm: () => void;
   onCancel: () => void;
+  /** Calls `t("exportOldVersionConfirmTitle")`,
+   * `t("exportOldVersionConfirmBody", { n })`, `t("deleteCancel")`,
+   * `t("exportOldVersionConfirm")`. */
+  t: TFunction;
 }
 
 /** Confirms exporting a note while browsing a historical (not latest)
- * version -- same modal shell as `DeleteNoteModal`/`MyDetailsModal` (this
- * org's established in-app dialog pattern), not `window.confirm`. Export
- * itself is synchronous (no network round-trip), so there's no
- * loading/disabled state to manage here, unlike the delete confirm. */
-export default function ConfirmExportOldVersionModal({ version, onConfirm, onCancel }: Props) {
-  const t = useTranslations("notes");
-
+ * version -- extracted verbatim from `tack`'s own
+ * `ConfirmExportOldVersionModal.tsx`. */
+export default function ConfirmExportOldVersionModal({ version, onConfirm, onCancel, t }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 print:hidden" onClick={onCancel}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
@@ -48,7 +48,7 @@ export default function ConfirmExportOldVersionModal({ version, onConfirm, onCan
           <button
             type="button"
             onClick={onConfirm}
-            className="px-4 py-2 text-sm font-medium bg-rose-700 hover:bg-rose-800 text-white rounded-lg transition-colors"
+            className="px-4 py-2 text-sm font-medium bg-[var(--tnotes-700,#be123c)] hover:bg-[var(--tnotes-800,#9f1239)] text-white rounded-lg transition-colors"
           >
             {t("exportOldVersionConfirm")}
           </button>

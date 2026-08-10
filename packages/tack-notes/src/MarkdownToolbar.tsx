@@ -1,15 +1,17 @@
 "use client";
 
-import { useState, type RefObject } from "react";
-import type { PickedAsset } from "@ullav/dam-picker";
-import { useAuth } from "@/contexts/AuthContext";
-import DamPickerModal from "@/components/DamPickerModal";
+import { useState, type ComponentType, type RefObject } from "react";
 
 interface Props {
   textareaRef: RefObject<HTMLTextAreaElement | null>;
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
+  /** Optional -- omit and the "Insert image" button simply doesn't render.
+   * Lets a host app plug in its own DAM picker (`tack` uses its own
+   * `DamPickerModal`) without forcing every consumer of this package to
+   * have DAM asset embedding wired up at all. */
+  ImagePicker?: ComponentType<{ onSelect: (asset: { url: string; name: string }) => void; onClose: () => void }>;
 }
 
 interface Transform {
@@ -33,9 +35,8 @@ function prefixLine(el: HTMLTextAreaElement, value: string, prefix: string): Tra
   return { next, selStart: start + prefix.length, selEnd: el.selectionEnd + prefix.length };
 }
 
-// Same cursor-insertion shape as togra's StickyCard.insertAsset -- pads
-// with a blank line on either side only where the surrounding text isn't
-// already at a line boundary, so the image snippet doesn't run into
+// Pads with a blank line on either side only where the surrounding text
+// isn't already at a line boundary, so the image snippet doesn't run into
 // adjacent prose.
 function insertSnippet(el: HTMLTextAreaElement, value: string, snippet: string): Transform {
   const pos = el.selectionStart;
@@ -58,18 +59,10 @@ function Icon({ children }: { children: React.ReactNode }) {
 
 /** Most people don't know (or remember) markdown syntax, so a plain
  * textarea with no visible formatting affordance isn't a real editing
- * surface for them -- same reasoning as Pages' `EditorToolbar`, applied to
- * a plain textarea instead of a TipTap `Editor` instance. Manipulates the
- * textarea's selection directly (wrap/prefix), then restores focus and
- * selection on the next frame, since updating `value` via `onChange`
- * doesn't happen synchronously.
- *
- * "Insert image" opens `DamPickerModal` (Tack's own copy of togra's
- * `@ullav/dam-picker`) and inserts a plain markdown image link at the
- * cursor, same as the other buttons here. */
-export default function MarkdownToolbar({ textareaRef, value, onChange, disabled }: Props) {
-  const { token } = useAuth();
-  const [showDamPicker, setShowDamPicker] = useState(false);
+ * surface for them. Extracted from `tack`'s own `MarkdownToolbar.tsx`, with
+ * DAM/auth coupling removed -- see `ImagePicker` above. */
+export default function MarkdownToolbar({ textareaRef, value, onChange, disabled, ImagePicker }: Props) {
+  const [showImagePicker, setShowImagePicker] = useState(false);
 
   function apply(transform: (el: HTMLTextAreaElement, value: string) => Transform) {
     const el = textareaRef.current;
@@ -82,15 +75,9 @@ export default function MarkdownToolbar({ textareaRef, value, onChange, disabled
     });
   }
 
-  // Mirrors togra StickyCard's insertAsset: always embeds the thumbnail
-  // URL, not the full asset -- ullav-dam-server serves both
-  // `/assets/:id/thumbnail` and `/assets/:id/download` with no auth
-  // required (verified directly against the server), so this is a plain
-  // markdown image link, no authenticated-fetch indirection needed.
-  function insertAsset(asset: PickedAsset) {
-    const url = asset.url.replace(/\/?$/, "/thumbnail");
-    apply((el, v) => insertSnippet(el, v, `![${asset.name}](${url})`));
-    setShowDamPicker(false);
+  function insertAsset(asset: { url: string; name: string }) {
+    apply((el, v) => insertSnippet(el, v, `![${asset.name}](${asset.url})`));
+    setShowImagePicker(false);
   }
 
   const buttons: { title: string; icon: React.ReactNode; onClick: () => void }[] = [
@@ -119,9 +106,7 @@ export default function MarkdownToolbar({ textareaRef, value, onChange, disabled
     },
     {
       title: "Heading",
-      icon: (
-        <span className="text-[11px] font-bold w-3.5 text-center leading-none">H</span>
-      ),
+      icon: <span className="text-[11px] font-bold w-3.5 text-center leading-none">H</span>,
       onClick: () => apply((el, v) => prefixLine(el, v, "## ")),
     },
     {
@@ -175,17 +160,21 @@ export default function MarkdownToolbar({ textareaRef, value, onChange, disabled
       ),
       onClick: () => apply((el, v) => wrapSelection(el, v, "[", "](url)")),
     },
-    {
-      title: "Insert image",
-      icon: (
-        <Icon>
-          <rect x="1.75" y="2.75" width="12.5" height="10.5" rx="1.25" />
-          <circle cx="5" cy="6" r="1.1" fill="currentColor" stroke="none" />
-          <path d="m2.5 11 3.5-3.5 2 2 2.5-3 3 4.5" strokeLinecap="round" strokeLinejoin="round" />
-        </Icon>
-      ),
-      onClick: () => setShowDamPicker(true),
-    },
+    ...(ImagePicker
+      ? [
+          {
+            title: "Insert image",
+            icon: (
+              <Icon>
+                <rect x="1.75" y="2.75" width="12.5" height="10.5" rx="1.25" />
+                <circle cx="5" cy="6" r="1.1" fill="currentColor" stroke="none" />
+                <path d="m2.5 11 3.5-3.5 2 2 2.5-3 3 4.5" strokeLinecap="round" strokeLinejoin="round" />
+              </Icon>
+            ),
+            onClick: () => setShowImagePicker(true),
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -203,9 +192,7 @@ export default function MarkdownToolbar({ textareaRef, value, onChange, disabled
         </button>
       ))}
 
-      {showDamPicker && token && (
-        <DamPickerModal token={token} onSelect={insertAsset} onClose={() => setShowDamPicker(false)} />
-      )}
+      {showImagePicker && ImagePicker && <ImagePicker onSelect={insertAsset} onClose={() => setShowImagePicker(false)} />}
     </div>
   );
 }

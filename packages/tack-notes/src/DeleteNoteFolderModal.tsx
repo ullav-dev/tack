@@ -1,20 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import { useTranslations } from "next-intl";
+import type { TFunction } from "./types";
 
 interface Props {
+  folderName: string;
+  noteCount: number;
   onConfirm: () => Promise<void>;
   onCancel: () => void;
+  /** Calls `t("deleteFolderConfirmTitle", { name })`,
+   * `t("deleteFolderConfirmBodyWithNotes", { count })`,
+   * `t("deleteFolderConfirmBodyEmpty")`, `t("deleteFolderCancel")`,
+   * `t("deleteFolder")`, `t("deleting")`. */
+  t: TFunction;
 }
 
-/** Confirmation dialog for deleting a note -- same modal shell/styling as
- * `MyDetailsModal` (the org's established in-app dialog pattern), not
- * `window.confirm`, so a destructive action that also cascades to every
- * saved version and reply gets a properly themed, explicit warning rather
- * than a generic browser prompt. */
-export default function DeleteNoteModal({ onConfirm, onCancel }: Props) {
-  const t = useTranslations("notes");
+/** Confirmation dialog for deleting a Notes folder -- extracted verbatim
+ * from `tack`'s own `DeleteNoteFolderModal.tsx`. Non-destructive to the
+ * notes themselves: they're unfiled, not deleted. */
+export default function DeleteNoteFolderModal({ folderName, noteCount, onConfirm, onCancel, t }: Props) {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,10 +34,10 @@ export default function DeleteNoteModal({ onConfirm, onCancel }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 print:hidden" onClick={onCancel}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onCancel}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
-          <h2 className="text-base font-semibold text-slate-800">{t("deleteNoteConfirmTitle")}</h2>
+          <h2 className="text-base font-semibold text-slate-800">{t("deleteFolderConfirmTitle", { name: folderName })}</h2>
           <button
             type="button"
             onClick={onCancel}
@@ -47,7 +51,9 @@ export default function DeleteNoteModal({ onConfirm, onCancel }: Props) {
         </div>
 
         <div className="px-6 py-5 space-y-3">
-          <p className="text-sm text-slate-600">{t("deleteNoteConfirmBody")}</p>
+          <p className="text-sm text-slate-600">
+            {noteCount > 0 ? t("deleteFolderConfirmBodyWithNotes", { count: noteCount }) : t("deleteFolderConfirmBodyEmpty")}
+          </p>
           {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
         </div>
 
@@ -58,7 +64,7 @@ export default function DeleteNoteModal({ onConfirm, onCancel }: Props) {
             disabled={deleting}
             className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50"
           >
-            {t("deleteCancel")}
+            {t("deleteFolderCancel")}
           </button>
           <button
             type="button"
@@ -66,7 +72,7 @@ export default function DeleteNoteModal({ onConfirm, onCancel }: Props) {
             disabled={deleting}
             className="px-4 py-2 text-sm font-medium bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors disabled:opacity-60"
           >
-            {deleting ? t("saving") : t("deleteNote")}
+            {deleting ? t("deleting") : t("deleteFolder")}
           </button>
         </div>
       </div>

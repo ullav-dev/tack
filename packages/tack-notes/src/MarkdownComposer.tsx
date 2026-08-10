@@ -1,9 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { useTranslations } from "next-intl";
-import NoteMarkdown from "@/components/NoteMarkdown";
-import MarkdownToolbar from "@/components/MarkdownToolbar";
+import { useRef, useState, type ComponentType } from "react";
+import NoteMarkdown from "./NoteMarkdown";
+import MarkdownToolbar from "./MarkdownToolbar";
+import type { TFunction } from "./types";
 
 interface Props {
   value: string;
@@ -11,18 +11,15 @@ interface Props {
   placeholder?: string;
   disabled?: boolean;
   rows?: number;
+  /** Calls `t("write")`, `t("preview")`, `t("nothingToPreview")`. */
+  t: TFunction;
+  ImagePicker?: ComponentType<{ onSelect: (asset: { url: string; name: string }) => void; onClose: () => void }>;
 }
 
 /** Plain markdown textarea (with a formatting toolbar and a live preview
- * toggle) — Notes are markdown-only, single-writer (no live collaboration,
- * unlike Pages' TipTap/Yjs editor), so a request/response textarea is the
- * correct model here, not a rich WYSIWYG surface. The toolbar exists
- * because most people don't know or remember markdown syntax -- the same
- * "an editing surface needs a visible formatting affordance" reasoning as
- * Pages' `EditorToolbar`. */
-export default function MarkdownComposer({ value, onChange, placeholder, disabled, rows = 5 }: Props) {
+ * toggle) -- extracted verbatim from `tack`'s own `MarkdownComposer.tsx`. */
+export default function MarkdownComposer({ value, onChange, placeholder, disabled, rows = 5, t, ImagePicker }: Props) {
   const [previewing, setPreviewing] = useState(false);
-  const t = useTranslations("notes");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   return (
@@ -49,7 +46,7 @@ export default function MarkdownComposer({ value, onChange, placeholder, disable
         </div>
       ) : (
         <div>
-          <MarkdownToolbar textareaRef={textareaRef} value={value} onChange={onChange} disabled={disabled} />
+          <MarkdownToolbar textareaRef={textareaRef} value={value} onChange={onChange} disabled={disabled} ImagePicker={ImagePicker} />
           <textarea
             ref={textareaRef}
             value={value}
@@ -57,7 +54,7 @@ export default function MarkdownComposer({ value, onChange, placeholder, disable
             placeholder={placeholder}
             disabled={disabled}
             rows={rows}
-            className="w-full rounded-b border border-slate-200 px-3 py-2 text-sm font-mono focus:border-rose-400 focus:outline-none focus:ring-1 focus:ring-rose-400"
+            className="w-full rounded-b border border-slate-200 px-3 py-2 text-sm font-mono focus:border-[var(--tnotes-400,#fb7185)] focus:outline-none focus:ring-1 focus:ring-[var(--tnotes-400,#fb7185)]"
           />
         </div>
       )}

@@ -3,7 +3,7 @@
 import ResizableSplit from "@/components/ResizableSplit";
 import Navigator from "@/components/Navigator";
 import { PageEventsProvider } from "@/contexts/PageEventsContext";
-import { NoteEventsProvider } from "@/contexts/NoteEventsContext";
+import { NoteEventsProvider } from "@ullav-dev/tack-notes";
 
 /** Full-width workspace shell (Spaces/Pages/Notes) — persistent left
  * Navigator via ResizableSplit, page/note content on the right as

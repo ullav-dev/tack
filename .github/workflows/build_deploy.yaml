@@ -19,6 +19,34 @@ jobs:
       - name: Run tests
         run: npm test
 
+  publish-tack-notes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@ullav-dev'
+      - name: Publish @ullav-dev/tack-notes (if version is new)
+        working-directory: packages/tack-notes
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          PUBLISHED=$(npm show @ullav-dev/tack-notes@$VERSION version 2>/dev/null || true)
+          if [ -z "$PUBLISHED" ]; then
+            echo "Publishing @ullav-dev/tack-notes@$VERSION"
+            npm publish
+          else
+            echo "@ullav-dev/tack-notes@$VERSION already published, skipping"
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   docker:
     needs: test
     runs-on: ubuntu-latest
