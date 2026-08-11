@@ -24,9 +24,15 @@ export interface TackNoteThreadProps {
   /** Turns a `created_by` UUID into a display name -- `teamId` is the
    * note's own `team_id` (only known once the note has loaded, which is why
    * this isn't a plain `(userId) => string` the host app can pre-resolve
-   * once up front). How you resolve this (team roster, system-principal
-   * lookup, or a mix) is entirely up to the host app. */
-  resolveAuthor: (userId: string, teamId: string | null) => string;
+   * once up front). The optional third argument is the specific note or
+   * reply being displayed (never the top-level note when resolving a
+   * reply's own author) -- lets a host app derive an author from the
+   * note's own content when `created_by` alone isn't enough (e.g. cunav's
+   * inbound-email notes, attributed to a fixed service account but with
+   * the real reporter's name embedded in the body). How you resolve this
+   * (team roster, system-principal lookup, note content, or a mix) is
+   * entirely up to the host app. */
+  resolveAuthor: (userId: string, teamId: string | null, note?: Note) => string;
   /** Calls `t("notes")` namespace keys -- see this package's README for the
    * full list. */
   t: TFunction;
@@ -352,7 +358,7 @@ export default function TackNoteThread({
     if (displayedReplies.length) {
       lines.push("", "---", "", "## Replies", "");
       for (const r of displayedReplies) {
-        lines.push(`### ${resolveAuthor(r.created_by, noteTeamId)} — ${new Date(r.created_at).toLocaleString()}`, "", r.body_markdown, "");
+        lines.push(`### ${resolveAuthor(r.created_by, noteTeamId, r)} — ${new Date(r.created_at).toLocaleString()}`, "", r.body_markdown, "");
       }
     }
     downloadFile(`${slugify(exportTitle)}.md`, lines.join("\n"), "text/markdown");
@@ -367,7 +373,7 @@ export default function TackNoteThread({
     if (displayedReplies.length) {
       bodyHtml += `<hr/><h2>Replies</h2>`;
       for (const r of displayedReplies) {
-        bodyHtml += `<p class="meta">${escapeHtml(resolveAuthor(r.created_by, noteTeamId))} — ${new Date(r.created_at).toLocaleString()}</p>${markdownToHtml(r.body_markdown)}`;
+        bodyHtml += `<p class="meta">${escapeHtml(resolveAuthor(r.created_by, noteTeamId, r))} — ${new Date(r.created_at).toLocaleString()}</p>${markdownToHtml(r.body_markdown)}`;
       }
     }
     downloadFile(`${slugify(exportTitle)}.html`, wrapHtmlDocument(exportTitle, bodyHtml), "text/html");
@@ -463,7 +469,7 @@ export default function TackNoteThread({
           </span>
         )}
         <span className="text-xs text-slate-400">
-          {t("editedBy", { name: resolveAuthor(note.created_by, note.team_id) })} · {new Date(note.created_at).toLocaleString()}
+          {t("editedBy", { name: resolveAuthor(note.created_by, note.team_id, note) })} · {new Date(note.created_at).toLocaleString()}
         </span>
         <div className="flex-1" />
         {latestRevision && !viewingRevision && (
@@ -553,7 +559,7 @@ export default function TackNoteThread({
             <ReplyItem
               key={reply.id}
               reply={reply}
-              authorName={resolveAuthor(reply.created_by, note.team_id)}
+              authorName={resolveAuthor(reply.created_by, note.team_id, reply)}
               canEdit={!viewingRevision && canEditReply(reply)}
               onSave={(body) => saveReplyEdit(reply.id, body)}
               onDelete={() => deleteReply(reply.id)}

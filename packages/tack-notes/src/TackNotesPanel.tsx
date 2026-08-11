@@ -25,7 +25,7 @@ export interface TackNotesPanelProps {
   teamId: string;
   currentUserId: string;
   isAdmin: boolean;
-  resolveAuthor: (userId: string, teamId: string | null) => string;
+  resolveAuthor: (userId: string, teamId: string | null, note?: Note) => string;
   t: TFunction;
   /** Whether the caller may create notes/replies here at all. Default true.
    * Editing/deleting an individual note is still governed by
@@ -462,7 +462,7 @@ export default function TackNotesPanel({
                       <span className="font-medium text-slate-800 truncate">{note.title || t("untitled")}</span>
                     </span>
                     <span className="block text-[11px] text-slate-400 truncate">
-                      {resolveAuthor(note.created_by, note.team_id)} · {new Date(note.created_at).toLocaleDateString()}
+                      {resolveAuthor(note.created_by, note.team_id, note)} · {new Date(note.created_at).toLocaleDateString()}
                       {showFolders &&
                         note.folder_id &&
                         (() => {
