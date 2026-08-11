@@ -162,6 +162,11 @@ proved necessary:
 - `autoSelectFirst` (default `false`) — select the first note once the
   initial list loads.
 - `defaultVisibility` (default `"team"`) — preselected in the new-note form.
+- `autoTitle` — when set, the new-note form has no title field at all;
+  every note this panel creates is titled with this fixed string instead
+  (e.g. lagan's PR discussion, a flat comment thread where no reader ever
+  sees a "title" and asking for one would be pure friction). Leave unset
+  for the normal title input.
 - `showUnreadBadges` (default `true`) — via `note_reads`; a note is marked
   read the moment it's opened.
 - `refreshSignal` — bump to silently re-fetch the list in the background
