@@ -44,6 +44,12 @@ export interface NoteFolder {
   organization_id: string;
   team_id: string;
   name: string;
+  /** All three set together (an entity-scoped folder, e.g. one cunav
+   * ticket's own sub-folders) or all three null (a team-wide folder). See
+   * tack-server's `012_entity_scoped_note_folders.sql`. */
+  owning_service: string | null;
+  entity_type: string | null;
+  entity_id: string | null;
   created_at: string;
   updated_at: string;
   note_count: number;
@@ -104,9 +110,13 @@ export interface TackNotesApi {
   listReplies(id: string): Promise<Note[]>;
   createReply(id: string, bodyMarkdown: string): Promise<Note>;
   listNoteFolders(teamId?: string, opts?: { limit?: number; offset?: number }): Promise<NoteFoldersPage>;
-  createNoteFolder(payload: { team_id: string; name: string }): Promise<NoteFolder>;
+  createNoteFolder(payload: { team_id: string; name: string; attach?: AttachRequest }): Promise<NoteFolder>;
   renameNoteFolder(id: string, name: string): Promise<NoteFolder>;
   deleteNoteFolder(id: string): Promise<void>;
+  /** One entity's own folders (e.g. a cunav ticket's sub-folders) -- see
+   * tack-server's `GET /note-folders/by-entity`. Not paginated, same
+   * reasoning as `listNotesByAttachment`. */
+  listNoteFoldersByAttachment(owningService: string, entityType: string, entityId: string): Promise<NoteFolder[]>;
   listRevisions(id: string): Promise<NoteRevision[]>;
   createRevision(id: string): Promise<NoteRevision>;
   deleteRevision(noteId: string, revisionId: string): Promise<void>;
@@ -171,6 +181,10 @@ export function createTackNotesApi(base: string, token: string): TackNotesApi {
     createNoteFolder: (payload) => req("/note-folders", { method: "POST", body: JSON.stringify(payload) }),
     renameNoteFolder: (id, name) => req(`/note-folders/${id}`, { method: "PATCH", body: JSON.stringify({ name }) }),
     deleteNoteFolder: (id) => req(`/note-folders/${id}`, { method: "DELETE" }),
+    listNoteFoldersByAttachment(owningService, entityType, entityId) {
+      const params = new URLSearchParams({ owning_service: owningService, entity_type: entityType, entity_id: entityId });
+      return req(`/note-folders/by-entity?${params.toString()}`);
+    },
     listRevisions: (id) => req(`/notes/${id}/revisions`),
     createRevision: (id) => req(`/notes/${id}/revisions`, { method: "POST" }),
     deleteRevision: (noteId, revisionId) => req(`/notes/${noteId}/revisions/${revisionId}`, { method: "DELETE" }),

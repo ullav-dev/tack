@@ -36,6 +36,12 @@ that travels with the package — every host app supplies its own:
   `next-intl`-wrapped router or a `/notes/:id` route shape, and
   `TackNoteTree` takes `selectedNoteId` as a plain prop instead of reading
   a route param itself.
+- **Entity-scoped folders**: `TackNoteThread` takes an optional `folders`
+  prop -- when given, it's used as-is for the note's own folder-move
+  selector instead of the default self-fetch (`api.listNoteFolders(note.
+  team_id)`, tack-server's team-wide folders). `TackNotesPanel` passes its
+  own entity-scoped list here, since a team-wide fetch would never include
+  those folders. Leave unset for `TackNoteTree`'s usage (the default).
 - **Roster**: `resolveAuthor(userId, teamId): string` — `teamId` is the
   note's own `team_id` (only known once `TackNoteThread` has loaded it, so
   this can't be a plain `(userId) => string` the host app pre-resolves up
@@ -100,7 +106,9 @@ have one.
 `TackNotesPanel` calls (namespace `notes`, via `t` — a superset of
 `TackNoteThread`'s own list above, since it renders `TackNoteThread` directly
 for the detail pane): everything `TackNoteThread` needs, plus `addNote`,
-`backToList`, `noNotes`, `selectNote`, `unread`, `untitled`.
+`backToList`, `deleteFolder`, `folderFilterAll`, `folderFilterMine`,
+`folderFilterShared`, `newFolder`, `newFolderName`, `noNotes`,
+`renameFolder`, `selectNote`, `unread`, `untitled`.
 
 ## Exports
 
@@ -125,6 +133,14 @@ cover every layout/behavior mode the existing per-app `NotesPanel`s already
 proved necessary:
 
 - `editable` (default `true`) — create/reply at all.
+- `showFolders` (default `true`) — this entity's own folders (`GET /note-
+  folders/by-entity`, tack-server's entity-scoped folders, distinct from
+  `TackNoteTree`'s team-wide ones): quick "all"/"mine"/"shared" filter
+  chips plus real folder create/rename/delete. `false` for a minimal list
+  with no folder chrome at all. When on, also passed straight into the
+  detail pane's own folder-move selector via `TackNoteThread`'s `folders`
+  prop, instead of that component's default team-wide self-fetch (which
+  would never include an entity-scoped folder).
 - `compact` (default `false`) — narrower rows, smaller type; for a sidebar
   widget placement.
 - `twoColumn` (default `false`) — list and detail side by side via a
