@@ -11,6 +11,10 @@ import type { TFunction } from "./types";
 
 type FolderFilter = "all" | "mine" | "shared" | string;
 
+// See folderScope="team"'s doc comment above -- matches the limit togra's
+// own prior chip bar effectively had (it fetched everything, unpaginated).
+const TEAM_FOLDERS_LIMIT = 200;
+
 export interface TackNotesPanelProps {
   api: TackNotesApi;
   /** The entity this panel's notes are attached to (`content_attachments`),
@@ -36,6 +40,20 @@ export interface TackNotesPanelProps {
    * entity`. Default true. Set false for a minimal list with no folder
    * chrome at all. */
   showFolders?: boolean;
+  /** Where the folder chips (when `showFolders`) come from:
+   * - "entity" (default): this one entity's own folders, via `GET
+   *   /note-folders/by-entity` -- cunav's model, a folder scoped to one
+   *   ticket.
+   * - "team": the caller's whole team folder list, via `GET
+   *   /note-folders?team_id=` -- togra's model, one team-wide folder set
+   *   a note (attached to any entity type) can be filed into, matching
+   *   what its own pre-migration NotesPanel already did. Fetched with a
+   *   generously large single-page limit, same as togra's own prior
+   *   unpaginated chip bar -- a team folder *count* growing past that is
+   *   a pre-existing constraint carried over, not solved here; the chip-
+   *   bar UI isn't built for a real Pager the way `NoteTree`'s browse
+   *   view is. */
+  folderScope?: "entity" | "team";
   /** Narrower list rows, smaller type -- for a sidebar-widget placement.
    * Default false. */
   compact?: boolean;
@@ -67,8 +85,11 @@ export interface TackNotesPanelProps {
  * `NotesPanel` actually needs (a thread per ticket/workflow/job), unlike
  * `TackNoteTree`, which is tack's own app-specific "browse my whole team's
  * notes by folder" Navigator experience. Backed by `GET /notes/by-entity`,
- * not `GET /notes` -- there is no folder concept here at all, since an
- * entity-attached note was never filed into one. */
+ * not `GET /notes`. Folder chrome (`showFolders`) is optional and, via
+ * `folderScope`, can be scoped either to this one entity (cunav's model)
+ * or to the caller's whole team (togra's model, matching what a note
+ * filed under any entity type could already be organized into pre-
+ * migration) -- see each prop's own doc comment. */
 export default function TackNotesPanel({
   api,
   owningService,
@@ -81,6 +102,7 @@ export default function TackNotesPanel({
   t,
   editable = true,
   showFolders = true,
+  folderScope = "entity",
   compact = false,
   twoColumn = false,
   autoSelectFirst = false,
@@ -112,11 +134,14 @@ export default function TackNotesPanel({
   async function load(silent = false) {
     if (!silent) setError(null);
     try {
+      const loadFolders = () =>
+        folderScope === "team"
+          ? api.listNoteFolders(teamId, { limit: TEAM_FOLDERS_LIMIT }).then((p) => p.folders)
+          : api.listNoteFoldersByAttachment(owningService, entityType, entityId);
       const [result] = await Promise.all([
         api.listNotesByAttachment(owningService, entityType, entityId),
         showFolders
-          ? api
-              .listNoteFoldersByAttachment(owningService, entityType, entityId)
+          ? loadFolders()
               .then((f) => setFolders([...f].sort((a, b) => a.name.localeCompare(b.name))))
               .catch(() => {
                 /* Non-fatal: folder chrome just won't offer choices. */
@@ -209,7 +234,7 @@ export default function TackNotesPanel({
       const folder = await api.createNoteFolder({
         team_id: teamId,
         name: newFolderName.trim(),
-        attach: { owning_service: owningService, entity_type: entityType, entity_id: entityId },
+        ...(folderScope === "team" ? {} : { attach: { owning_service: owningService, entity_type: entityType, entity_id: entityId } }),
       });
       setFolders((prev) => [...prev, folder].sort((a, b) => a.name.localeCompare(b.name)));
       setNewFolderName("");
