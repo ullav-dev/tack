@@ -52,7 +52,13 @@ export interface TackNotesPanelProps {
    *   unpaginated chip bar -- a team folder *count* growing past that is
    *   a pre-existing constraint carried over, not solved here; the chip-
    *   bar UI isn't built for a real Pager the way `NoteTree`'s browse
-   *   view is. */
+   *   view is.
+   *
+   *   Folder *delete* is hidden entirely in "team" mode: tack-server's
+   *   `DELETE /note-folders/:id` unfiles every note in that folder
+   *   org-wide, not just this entity's -- a destructive, team-wide action
+   *   whose blast radius this panel (scoped to one entity) can't show the
+   *   caller. Create/rename stay available (non-destructive). */
   folderScope?: "entity" | "team";
   /** Narrower list rows, smaller type -- for a sidebar-widget placement.
    * Default false. */
@@ -414,9 +420,11 @@ export default function TackNotesPanel({
                   >
                     {editIcon}
                   </IconButton>
-                  <IconButton title={t("deleteFolder")} onClick={() => removeFolder(folder)} danger>
-                    {deleteIcon}
-                  </IconButton>
+                  {folderScope !== "team" && (
+                    <IconButton title={t("deleteFolder")} onClick={() => removeFolder(folder)} danger>
+                      {deleteIcon}
+                    </IconButton>
+                  )}
                 </div>
               </div>
             )

@@ -150,6 +150,10 @@ proved necessary:
     (unpaginated) — a team's folder count growing past that is a
     pre-existing constraint carried over, not solved here; the chip-bar UI
     isn't built for a real `Pager` the way `NoteTree`'s browse view is.
+    Folder *delete* is hidden entirely in `"team"` mode — `DELETE
+    /note-folders/:id` unfiles every note in that folder org-wide, not
+    just this entity's, and a panel scoped to one entity can't show the
+    caller that blast radius. Create/rename stay available.
 - `compact` (default `false`) — narrower rows, smaller type; for a sidebar
   widget placement.
 - `twoColumn` (default `false`) — list and detail side by side via a
