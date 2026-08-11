@@ -77,10 +77,28 @@ export interface SystemPrincipalsPage {
   total: number;
 }
 
+export interface AttachRequest {
+  owning_service: string;
+  entity_type: string;
+  entity_id: string;
+}
+
 export interface TackNotesApi {
   listNotes(teamId: string, opts?: { limit?: number; offset?: number; folderId?: string; unfiled?: boolean }): Promise<NotesPage>;
   getNote(id: string): Promise<Note>;
-  createNote(payload: { team_id: string; visibility: Visibility; title: string; body_markdown: string; folder_id?: string }): Promise<Note>;
+  createNote(payload: {
+    team_id: string;
+    visibility: Visibility;
+    title: string;
+    body_markdown: string;
+    folder_id?: string;
+    attach?: AttachRequest;
+  }): Promise<Note>;
+  /** Top-level notes attached to an external entity (e.g. a cunav ticket, a
+   * togra workflow), oldest-first -- see tack-server's `GET /notes/by-entity`.
+   * Not paginated: entity-attached note counts are small in practice (a
+   * thread per ticket, not a team-wide list), unlike `listNotes`. */
+  listNotesByAttachment(owningService: string, entityType: string, entityId: string): Promise<Note[]>;
   updateNote(id: string, payload: { title?: string; body_markdown?: string; visibility?: Visibility; folder_id?: string | null }): Promise<Note>;
   deleteNote(id: string): Promise<void>;
   listReplies(id: string): Promise<Note[]>;
@@ -134,6 +152,10 @@ export function createTackNotesApi(base: string, token: string): TackNotesApi {
     },
     getNote: (id) => req(`/notes/${id}`),
     createNote: (payload) => req("/notes", { method: "POST", body: JSON.stringify(payload) }),
+    listNotesByAttachment(owningService, entityType, entityId) {
+      const params = new URLSearchParams({ owning_service: owningService, entity_type: entityType, entity_id: entityId });
+      return req(`/notes/by-entity?${params.toString()}`);
+    },
     updateNote: (id, payload) => req(`/notes/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
     deleteNote: (id) => req(`/notes/${id}`, { method: "DELETE" }),
     listReplies: (id) => req(`/notes/${id}/replies`),
