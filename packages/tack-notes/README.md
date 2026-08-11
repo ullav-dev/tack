@@ -133,14 +133,27 @@ cover every layout/behavior mode the existing per-app `NotesPanel`s already
 proved necessary:
 
 - `editable` (default `true`) — create/reply at all.
-- `showFolders` (default `true`) — this entity's own folders (`GET /note-
-  folders/by-entity`, tack-server's entity-scoped folders, distinct from
-  `TackNoteTree`'s team-wide ones): quick "all"/"mine"/"shared" filter
-  chips plus real folder create/rename/delete. `false` for a minimal list
-  with no folder chrome at all. When on, also passed straight into the
-  detail pane's own folder-move selector via `TackNoteThread`'s `folders`
-  prop, instead of that component's default team-wide self-fetch (which
-  would never include an entity-scoped folder).
+- `showFolders` (default `true`) — quick "all"/"mine"/"shared" filter chips
+  plus real folder create/rename/delete. `false` for a minimal list with no
+  folder chrome at all. When on, also passed straight into the detail
+  pane's own folder-move selector via `TackNoteThread`'s `folders` prop,
+  instead of that component's default team-wide self-fetch.
+- `folderScope` (default `"entity"`) — where those folder chips come from:
+  - `"entity"` — this one entity's own folders (`GET /note-folders/by-
+    entity`, tack-server's entity-scoped folders) — cunav's model, a
+    folder scoped to one ticket.
+  - `"team"` — the caller's whole team folder list (`GET /note-folders?
+    team_id=`, tack-server's team-wide folders, the same ones `TackNoteTree`
+    browses) — togra's model, one team-wide folder set any note (attached
+    to any entity type) can be filed into. Fetched with a single generously
+    large page (200), matching what togra's own pre-migration chip bar did
+    (unpaginated) — a team's folder count growing past that is a
+    pre-existing constraint carried over, not solved here; the chip-bar UI
+    isn't built for a real `Pager` the way `NoteTree`'s browse view is.
+    Folder *delete* is hidden entirely in `"team"` mode — `DELETE
+    /note-folders/:id` unfiles every note in that folder org-wide, not
+    just this entity's, and a panel scoped to one entity can't show the
+    caller that blast radius. Create/rename stay available.
 - `compact` (default `false`) — narrower rows, smaller type; for a sidebar
   widget placement.
 - `twoColumn` (default `false`) — list and detail side by side via a
