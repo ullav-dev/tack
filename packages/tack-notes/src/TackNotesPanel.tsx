@@ -72,6 +72,13 @@ export interface TackNotesPanelProps {
   autoSelectFirst?: boolean;
   /** Visibility offered by default in the new-note form. Default "team". */
   defaultVisibility?: Visibility;
+  /** When set, the new-note form has no title field at all -- every note
+   * this panel creates is titled with this fixed string instead (e.g.
+   * lagan's PR discussion, where a note is really just a flat comment and
+   * asking for a title would be pure friction with no reader ever seeing
+   * it). Leave unset for the normal title input (cunav/togra/awe-client's
+   * entity notes, where a real title is part of the note). */
+  autoTitle?: string;
   /** Show an unread dot per note (via `note_reads`), and mark a note read
    * when it's opened. Default true. */
   showUnreadBadges?: boolean;
@@ -113,6 +120,7 @@ export default function TackNotesPanel({
   twoColumn = false,
   autoSelectFirst = false,
   defaultVisibility = "team",
+  autoTitle,
   showUnreadBadges = true,
   refreshSignal,
   renderNoteActions,
@@ -212,13 +220,13 @@ export default function TackNotesPanel({
   useEffect(() => subscribeRefresh(async () => void (await load(true))), [subscribeRefresh]);
 
   async function submitNew() {
-    if (!newTitle.trim() || !newBody.trim()) return;
+    if ((!autoTitle && !newTitle.trim()) || !newBody.trim()) return;
     setSubmitting(true);
     try {
       const note = await api.createNote({
         team_id: teamId,
         visibility: newVisibility,
-        title: newTitle.trim(),
+        title: autoTitle ?? newTitle.trim(),
         body_markdown: newBody.trim(),
         attach: { owning_service: owningService, entity_type: entityType, entity_id: entityId },
       });
@@ -301,13 +309,15 @@ export default function TackNotesPanel({
         <div className="p-2 border-b border-slate-200 print:hidden">
           {creating ? (
             <div className="space-y-2">
-              <input
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-                placeholder={t("titlePlaceholder")}
-                disabled={submitting}
-                className="w-full text-sm rounded border border-slate-200 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[var(--tnotes-400,#fb7185)]"
-              />
+              {!autoTitle && (
+                <input
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  placeholder={t("titlePlaceholder")}
+                  disabled={submitting}
+                  className="w-full text-sm rounded border border-slate-200 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[var(--tnotes-400,#fb7185)]"
+                />
+              )}
               <MarkdownComposer
                 value={newBody}
                 onChange={setNewBody}
@@ -343,7 +353,7 @@ export default function TackNotesPanel({
                 <button
                   type="button"
                   onClick={submitNew}
-                  disabled={submitting || !newTitle.trim() || !newBody.trim()}
+                  disabled={submitting || (!autoTitle && !newTitle.trim()) || !newBody.trim()}
                   className="text-xs bg-[var(--tnotes-700,#be123c)] hover:bg-[var(--tnotes-800,#9f1239)] disabled:opacity-50 text-white px-3 py-1 rounded"
                 >
                   {submitting ? t("saving") : t("save")}
