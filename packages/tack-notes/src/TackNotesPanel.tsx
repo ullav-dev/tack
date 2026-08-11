@@ -2,12 +2,14 @@
 
 import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { useNoteEvents } from "./NoteEventsContext";
-import type { Note, TackNotesApi, Visibility } from "./api";
+import type { Note, NoteFolder, TackNotesApi, Visibility } from "./api";
 import TackNoteThread from "./TackNoteThread";
 import MarkdownComposer from "./MarkdownComposer";
 import ResizableSplit from "./ResizableSplit";
-import { plusIcon, noteIcon } from "./Icon";
+import { plusIcon, noteIcon, folderIcon, editIcon, deleteIcon, IconButton } from "./Icon";
 import type { TFunction } from "./types";
+
+type FolderFilter = "all" | "mine" | "shared" | string;
 
 export interface TackNotesPanelProps {
   api: TackNotesApi;
@@ -29,6 +31,11 @@ export interface TackNotesPanelProps {
    * Editing/deleting an individual note is still governed by
    * `TackNoteThread`'s own creator-or-admin rule regardless of this prop. */
   editable?: boolean;
+  /** Show this entity's own folders (quick "all"/"mine"/"shared" filters,
+   * plus real folder create/rename/delete) via `GET /note-folders/by-
+   * entity`. Default true. Set false for a minimal list with no folder
+   * chrome at all. */
+  showFolders?: boolean;
   /** Narrower list rows, smaller type -- for a sidebar-widget placement.
    * Default false. */
   compact?: boolean;
@@ -73,6 +80,7 @@ export default function TackNotesPanel({
   resolveAuthor,
   t,
   editable = true,
+  showFolders = true,
   compact = false,
   twoColumn = false,
   autoSelectFirst = false,
@@ -85,6 +93,12 @@ export default function TackNotesPanel({
   const { subscribe, subscribeDeleted, subscribeRefresh } = useNoteEvents();
 
   const [notes, setNotes] = useState<Note[] | null>(null);
+  const [folders, setFolders] = useState<NoteFolder[]>([]);
+  const [activeFolder, setActiveFolder] = useState<FolderFilter>("all");
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
+  const [renameFolderName, setRenameFolderName] = useState("");
   const [unread, setUnread] = useState<Record<string, boolean>>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -98,7 +112,17 @@ export default function TackNotesPanel({
   async function load(silent = false) {
     if (!silent) setError(null);
     try {
-      const result = await api.listNotesByAttachment(owningService, entityType, entityId);
+      const [result] = await Promise.all([
+        api.listNotesByAttachment(owningService, entityType, entityId),
+        showFolders
+          ? api
+              .listNoteFoldersByAttachment(owningService, entityType, entityId)
+              .then((f) => setFolders([...f].sort((a, b) => a.name.localeCompare(b.name))))
+              .catch(() => {
+                /* Non-fatal: folder chrome just won't offer choices. */
+              })
+          : Promise.resolve(),
+      ]);
       setNotes(result);
       if (showUnreadBadges && result.length > 0) {
         api
@@ -121,6 +145,8 @@ export default function TackNotesPanel({
   useEffect(() => {
     let cancelled = false;
     setNotes(null);
+    setFolders([]);
+    setActiveFolder("all");
     setSelectedId(null);
     load().then((result) => {
       if (!cancelled && autoSelectFirst && result && result.length > 0) {
@@ -176,6 +202,55 @@ export default function TackNotesPanel({
       setSubmitting(false);
     }
   }
+
+  async function submitNewFolder() {
+    if (!newFolderName.trim()) return;
+    try {
+      const folder = await api.createNoteFolder({
+        team_id: teamId,
+        name: newFolderName.trim(),
+        attach: { owning_service: owningService, entity_type: entityType, entity_id: entityId },
+      });
+      setFolders((prev) => [...prev, folder].sort((a, b) => a.name.localeCompare(b.name)));
+      setNewFolderName("");
+      setCreatingFolder(false);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
+  async function submitRenameFolder(id: string, name: string) {
+    if (!name.trim()) {
+      setRenamingFolderId(null);
+      return;
+    }
+    try {
+      const updated = await api.renameNoteFolder(id, name.trim());
+      setFolders((prev) => prev.map((f) => (f.id === updated.id ? updated : f)).sort((a, b) => a.name.localeCompare(b.name)));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setRenamingFolderId(null);
+    }
+  }
+
+  async function removeFolder(folder: NoteFolder) {
+    try {
+      await api.deleteNoteFolder(folder.id);
+      setFolders((prev) => prev.filter((f) => f.id !== folder.id));
+      setNotes((prev) => (prev ? prev.map((n) => (n.folder_id === folder.id ? { ...n, folder_id: null } : n)) : prev));
+      if (activeFolder === folder.id) setActiveFolder("all");
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
+  const filteredNotes = (notes ?? []).filter((n) => {
+    if (activeFolder === "all") return true;
+    if (activeFolder === "mine") return n.created_by === currentUserId;
+    if (activeFolder === "shared") return n.visibility !== "private";
+    return n.folder_id === activeFolder;
+  });
 
   function handleSelect(id: string) {
     setSelectedId(id);
@@ -257,15 +332,114 @@ export default function TackNotesPanel({
         </div>
       )}
 
+      {showFolders && notes !== null && (
+        <div className="flex items-center gap-1 overflow-x-auto px-2 py-1.5 border-b border-slate-100 shrink-0 print:hidden">
+          {(["all", "mine", "shared"] as const).map((key) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setActiveFolder(key)}
+              className={`shrink-0 text-xs px-2 py-1 rounded-full transition-colors whitespace-nowrap ${
+                activeFolder === key ? "bg-[var(--tnotes-100,#ffe4e6)] text-[var(--tnotes-700,#be123c)] font-medium" : "text-slate-500 hover:bg-slate-100"
+              }`}
+            >
+              {t(key === "all" ? "folderFilterAll" : key === "mine" ? "folderFilterMine" : "folderFilterShared")}
+            </button>
+          ))}
+          {folders.length > 0 && <span className="text-slate-200 shrink-0">|</span>}
+          {folders.map((folder) =>
+            renamingFolderId === folder.id ? (
+              <form
+                key={folder.id}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  submitRenameFolder(folder.id, renameFolderName);
+                }}
+                className="shrink-0"
+              >
+                <input
+                  autoFocus
+                  value={renameFolderName}
+                  onChange={(e) => setRenameFolderName(e.target.value)}
+                  onBlur={() => submitRenameFolder(folder.id, renameFolderName)}
+                  className="text-xs border border-[var(--tnotes-300,#fda4af)] rounded-full px-2 py-1 focus:outline-none w-28"
+                />
+              </form>
+            ) : (
+              <div key={folder.id} className="group shrink-0 flex items-center gap-0.5">
+                <button
+                  type="button"
+                  onClick={() => setActiveFolder(folder.id)}
+                  className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full transition-colors whitespace-nowrap ${
+                    activeFolder === folder.id
+                      ? "bg-[var(--tnotes-100,#ffe4e6)] text-[var(--tnotes-700,#be123c)] font-medium"
+                      : "text-slate-500 hover:bg-slate-100"
+                  }`}
+                >
+                  <span className="w-3 h-3">{folderIcon}</span>
+                  {folder.name}
+                </button>
+                <div className="hidden group-hover:flex items-center gap-0.5">
+                  <IconButton
+                    title={t("renameFolder")}
+                    onClick={() => {
+                      setRenamingFolderId(folder.id);
+                      setRenameFolderName(folder.name);
+                    }}
+                  >
+                    {editIcon}
+                  </IconButton>
+                  <IconButton title={t("deleteFolder")} onClick={() => removeFolder(folder)} danger>
+                    {deleteIcon}
+                  </IconButton>
+                </div>
+              </div>
+            )
+          )}
+          {creatingFolder ? (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                submitNewFolder();
+              }}
+              className="shrink-0"
+            >
+              <input
+                autoFocus
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                onBlur={() => {
+                  if (!newFolderName.trim()) setCreatingFolder(false);
+                }}
+                placeholder={t("newFolderName")}
+                className="text-xs border border-[var(--tnotes-300,#fda4af)] rounded-full px-2 py-1 focus:outline-none w-28"
+              />
+            </form>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setCreatingFolder(true);
+                setNewFolderName("");
+              }}
+              className="shrink-0 text-xs px-2 py-1 text-slate-400 hover:text-[var(--tnotes-700,#be123c)] transition-colors"
+              title={t("newFolder")}
+            >
+              + {t("newFolder")}
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="flex-1 min-h-0 overflow-y-auto">
         {error && <p className="p-3 text-xs text-red-600">{error}</p>}
         {notes === null ? (
           <p className="p-3 text-xs text-slate-400">{t("loading")}</p>
-        ) : notes.length === 0 ? (
+        ) : filteredNotes.length === 0 ? (
           <p className="p-3 text-xs text-slate-400">{t("noNotes")}</p>
         ) : (
           <ul className="divide-y divide-slate-100">
-            {notes.map((note) => (
+            {filteredNotes.map((note) => (
               <li
                 key={note.id}
                 className={`flex items-start gap-2 px-3 py-2 hover:bg-slate-50 ${
@@ -289,6 +463,12 @@ export default function TackNotesPanel({
                     </span>
                     <span className="block text-[11px] text-slate-400 truncate">
                       {resolveAuthor(note.created_by, note.team_id)} · {new Date(note.created_at).toLocaleDateString()}
+                      {showFolders &&
+                        note.folder_id &&
+                        (() => {
+                          const folder = folders.find((f) => f.id === note.folder_id);
+                          return folder ? ` · ${folder.name}` : null;
+                        })()}
                     </span>
                   </span>
                 </button>
@@ -312,6 +492,7 @@ export default function TackNotesPanel({
       t={t}
       onNavigateAfterDelete={() => setSelectedId(null)}
       ImagePicker={ImagePicker}
+      folders={showFolders ? folders : []}
     />
   ) : (
     <p className="p-6 text-sm text-slate-400">{t("selectNote")}</p>

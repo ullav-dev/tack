@@ -34,6 +34,12 @@ export interface TackNoteThreadProps {
    * the host app decides where "back to the notes list" means. */
   onNavigateAfterDelete: () => void;
   ImagePicker?: ComponentType<{ onSelect: (asset: { url: string; name: string }) => void; onClose: () => void }>;
+  /** Overrides the folder choices offered in the folder selector, instead
+   * of self-fetching `api.listNoteFolders(note.team_id)` (tack's own
+   * team-wide folder list). `TackNotesPanel` passes its own entity-scoped
+   * folder list here, since a team-wide fetch wouldn't include those at
+   * all. Leave unset for the default self-fetch behavior. */
+  folders?: NoteFolder[];
 }
 
 const historyIcon = (
@@ -79,7 +85,17 @@ const printIcon = (
  * behavioral doc comment (version history, viewing an old version, export)
  * lives in `tack`'s git history / the original file -- unchanged here,
  * just re-homed. */
-export default function TackNoteThread({ noteId, api, currentUserId, isAdmin, resolveAuthor, t, onNavigateAfterDelete, ImagePicker }: TackNoteThreadProps) {
+export default function TackNoteThread({
+  noteId,
+  api,
+  currentUserId,
+  isAdmin,
+  resolveAuthor,
+  t,
+  onNavigateAfterDelete,
+  ImagePicker,
+  folders: foldersOverride,
+}: TackNoteThreadProps) {
   const { notifyNoteUpdated, notifyNoteDeleted, subscribeRefresh } = useNoteEvents();
 
   const [note, setNote] = useState<Note | null>(null);
@@ -162,7 +178,14 @@ export default function TackNoteThread({ noteId, api, currentUserId, isAdmin, re
 
   // Folders are only ever relevant to a top-level note (replies can't be
   // filed -- server-enforced), and only once the note's own team is known.
+  // Skipped entirely when `foldersOverride` is given (TackNotesPanel's own
+  // entity-scoped folder list) -- a team-wide fetch wouldn't include those
+  // folders at all, so there's nothing to self-fetch in that mode.
   useEffect(() => {
+    if (foldersOverride !== undefined) {
+      setFolders(foldersOverride);
+      return;
+    }
     if (!note?.team_id) {
       setFolders(null);
       return;
@@ -182,7 +205,7 @@ export default function TackNoteThread({ noteId, api, currentUserId, isAdmin, re
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [note?.team_id]);
+  }, [note?.team_id, foldersOverride]);
 
   const canEdit = currentUserId === note?.created_by || isAdmin;
 
