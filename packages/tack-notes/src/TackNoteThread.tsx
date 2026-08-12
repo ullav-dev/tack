@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ComponentType } from "react";
+import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { useNoteEvents } from "./NoteEventsContext";
 import type { Note, NoteFolder, NoteRevision, TackNotesApi, Visibility } from "./api";
 import NoteMarkdown, { markdownToHtml } from "./NoteMarkdown";
@@ -46,6 +46,13 @@ export interface TackNoteThreadProps {
    * folder list here, since a team-wide fetch wouldn't include those at
    * all. Leave unset for the default self-fetch behavior. */
   folders?: NoteFolder[];
+  /** Renders arbitrary host-specific content directly below the note's own
+   * body (above the replies), e.g. cartlann's object-link editor ("which
+   * museum objects does this note discuss"). Same injection philosophy as
+   * `TackNotesPanel`'s `renderNoteActions` -- this package has no idea
+   * what an "object link" is, so the host app owns that UI entirely and
+   * just gets handed the loaded `Note` to key its own data off of. */
+  renderDetailExtra?: (note: Note) => ReactNode;
 }
 
 const historyIcon = (
@@ -101,6 +108,7 @@ export default function TackNoteThread({
   onNavigateAfterDelete,
   ImagePicker,
   folders: foldersOverride,
+  renderDetailExtra,
 }: TackNoteThreadProps) {
   const { notifyNoteUpdated, notifyNoteDeleted, subscribeRefresh } = useNoteEvents();
 
@@ -567,6 +575,8 @@ export default function TackNoteThread({
           <NoteMarkdown body={displayedBody} />
         </div>
       )}
+
+      {renderDetailExtra && !viewingRevision && <div className="print:hidden">{renderDetailExtra(note)}</div>}
 
       {displayedReplies.length > 0 && (
         <div className="border-t border-slate-200 pt-4 space-y-4">

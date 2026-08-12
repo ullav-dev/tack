@@ -88,7 +88,21 @@ export interface TackNotesPanelProps {
   /** Extra per-row actions (e.g. cunav's "send as email") rendered at the
    * right edge of each list row; clicks inside it don't select the row. */
   renderNoteActions?: (note: Note) => ReactNode;
+  /** Renders arbitrary host-specific content directly below a selected
+   * note's own body, e.g. cartlann's object-link editor. Threaded straight
+   * through to `TackNoteThread`'s own `renderDetailExtra` -- see its doc
+   * comment. */
+  renderDetailExtra?: (note: Note) => ReactNode;
   ImagePicker?: ComponentType<{ onSelect: (asset: { url: string; name: string }) => void; onClose: () => void }>;
+  /** Opens the new-note form pre-filled with this title/body, e.g. a host
+   * app's "save this AI response as a note" action from a sibling panel
+   * that has no note of its own to attach to yet. Consumed once (the form
+   * opens and is pre-filled) and then `onInitialDraftConsumed` fires so the
+   * host can clear its own state -- passing the same object again would
+   * otherwise silently do nothing (further edits inside the form are never
+   * clobbered by a stale draft). */
+  initialDraft?: { title?: string; body_markdown: string } | null;
+  onInitialDraftConsumed?: () => void;
 }
 
 /** An embeddable "notes attached to one entity" widget -- list + inline
@@ -124,7 +138,10 @@ export default function TackNotesPanel({
   showUnreadBadges = true,
   refreshSignal,
   renderNoteActions,
+  renderDetailExtra,
   ImagePicker,
+  initialDraft,
+  onInitialDraftConsumed,
 }: TackNotesPanelProps) {
   const { subscribe, subscribeDeleted, subscribeRefresh } = useNoteEvents();
 
@@ -144,6 +161,23 @@ export default function TackNotesPanel({
   const [newBody, setNewBody] = useState("");
   const [newVisibility, setNewVisibility] = useState<Visibility>(defaultVisibility);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!initialDraft) return;
+    setSelectedId(null);
+    setCreating(true);
+    setNewTitle(initialDraft.title ?? "");
+    setNewBody(initialDraft.body_markdown);
+    setNewVisibility(defaultVisibility);
+    onInitialDraftConsumed?.();
+    // initialDraft is consumed once by identity, not re-applied on every
+    // render -- onInitialDraftConsumed is expected to clear it on the host
+    // side. defaultVisibility/onInitialDraftConsumed deliberately excluded
+    // from deps: re-running this on their change (rather than only when a
+    // *new* draft object arrives) would reopen/reset the form under the
+    // user while they're mid-edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialDraft]);
 
   async function load(silent = false) {
     if (!silent) setError(null);
@@ -536,6 +570,7 @@ export default function TackNotesPanel({
       onNavigateAfterDelete={() => setSelectedId(null)}
       ImagePicker={ImagePicker}
       folders={showFolders ? folders : []}
+      renderDetailExtra={renderDetailExtra}
     />
   ) : (
     <p className="p-6 text-sm text-slate-400">{t("selectNote")}</p>
