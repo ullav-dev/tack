@@ -167,10 +167,5 @@
   "teamSelector": {
     "switchTeam": "Athraigh foireann",
     "selectTeam": "Roghnaigh foireann"
-  },
-  "home": {
-    "welcome": "Fáilte, {name}",
-    "tagline": "Nótaí agus Leathanaigh, uile in aon áit amháin.",
-    "activeTeam": "Ag féachaint mar {team}"
   }
 }
