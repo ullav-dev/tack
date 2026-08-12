@@ -1,6 +1,6 @@
 {
   "name": "@ullav-dev/tack-notes",
-  "version": "26.2.0",
+  "version": "26.3.0",
   "description": "Embeddable Notes UI (thread view + folder tree, and an entity-attached notes panel) backed by tack-server, for Next.js apps",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
