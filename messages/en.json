@@ -167,10 +167,5 @@
   "teamSelector": {
     "switchTeam": "Switch team",
     "selectTeam": "Select team"
-  },
-  "home": {
-    "welcome": "Welcome, {name}",
-    "tagline": "Notes & Pages, all in one place.",
-    "activeTeam": "Viewing as {team}"
   }
 }
