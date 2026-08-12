@@ -178,7 +178,7 @@ export default function MarkdownToolbar({ textareaRef, value, onChange, disabled
   ];
 
   return (
-    <div className="flex items-center gap-0.5 border border-b-0 border-slate-200 rounded-t px-1.5 py-1 bg-slate-50/60">
+    <div className="flex flex-wrap items-center gap-0.5 border border-b-0 border-slate-200 rounded-t px-1.5 py-1 bg-slate-50/60">
       {buttons.map((b) => (
         <button
           key={b.title}

@@ -315,7 +315,7 @@ export default function TackNotesPanel({
                   onChange={(e) => setNewTitle(e.target.value)}
                   placeholder={t("titlePlaceholder")}
                   disabled={submitting}
-                  className="w-full text-sm rounded border border-slate-200 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[var(--tnotes-400,#fb7185)]"
+                  className="box-border w-full text-sm rounded border border-slate-200 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[var(--tnotes-400,#fb7185)]"
                 />
               )}
               <MarkdownComposer
@@ -364,7 +364,7 @@ export default function TackNotesPanel({
             <button
               type="button"
               onClick={() => setCreating(true)}
-              className="w-full flex items-center justify-center gap-1.5 text-xs font-medium text-[var(--tnotes-700,#be123c)] hover:bg-[var(--tnotes-50,#fff1f2)] rounded px-2 py-1.5"
+              className="box-border w-full flex items-center justify-center gap-1.5 text-xs font-medium text-[var(--tnotes-700,#be123c)] hover:bg-[var(--tnotes-50,#fff1f2)] rounded px-2 py-1.5"
             >
               {plusIcon}
               {t("addNote")}

@@ -54,7 +54,15 @@ export default function MarkdownComposer({ value, onChange, placeholder, disable
             placeholder={placeholder}
             disabled={disabled}
             rows={rows}
-            className="w-full rounded-b border border-slate-200 px-3 py-2 text-sm font-mono focus:border-[var(--tnotes-400,#fb7185)] focus:outline-none focus:ring-1 focus:ring-[var(--tnotes-400,#fb7185)]"
+            // overflow-x-hidden: text always wraps in this box -- any
+            // width overflow is never something we want a horizontal
+            // scrollbar for. Needed because an empty textarea's
+            // `scrollWidth` is computed from its placeholder's *unwrapped*
+            // intrinsic width in some browsers (a real, if surprising,
+            // textarea quirk -- not a layout bug of ours), so `overflowX:
+            // auto` shows a scrollbar for a box that's visually never
+            // actually overflowing.
+            className="box-border w-full overflow-x-hidden rounded-b border border-slate-200 px-3 py-2 text-sm font-mono focus:border-[var(--tnotes-400,#fb7185)] focus:outline-none focus:ring-1 focus:ring-[var(--tnotes-400,#fb7185)]"
           />
         </div>
       )}

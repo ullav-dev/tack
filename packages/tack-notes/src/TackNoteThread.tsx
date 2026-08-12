@@ -406,7 +406,7 @@ export default function TackNoteThread({
   }
 
   return (
-    <div className="p-6 max-w-3xl space-y-6">
+    <div className="p-6 max-w-3xl min-w-0 space-y-6">
       <div className="flex items-center gap-3">
         {canEdit && !viewingRevision ? (
           <>
@@ -428,84 +428,99 @@ export default function TackNoteThread({
         )}
       </div>
 
-      <div className="flex items-center gap-2">
-        {canEdit && !viewingRevision ? (
-          <>
+      {/* Three independent wrap groups, not one long non-wrapping row --
+          this pane is as often a narrow embedded panel (Cunav, Togra) as it
+          is full browser width, and badges/byline/icon-actions all have
+          very different natural widths. Badges wrap among themselves; the
+          byline sits on its own line (never sharing a line with buttons,
+          so it can't get squeezed to nothing); actions wrap and stay
+          right-aligned when there's room, drop to icon rows when there
+          isn't. */}
+      <div className="space-y-1.5">
+        <div className="flex flex-wrap items-center gap-2">
+          {canEdit && !viewingRevision ? (
+            <>
+              <select
+                value={note.visibility}
+                onChange={(e) => saveVisibility(e.target.value as Visibility)}
+                disabled={visibilitySaving}
+                className="print:hidden text-xs px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 border-none focus:outline-none focus:ring-1 focus:ring-[var(--tnotes-400,#fb7185)] disabled:opacity-50"
+              >
+                <option value="private">{t("visibility.private")}</option>
+                <option value="team">{t("visibility.team")}</option>
+                <option value="organization">{t("visibility.organization")}</option>
+              </select>
+              <span className="hidden print:inline-block text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
+                {t(`visibility.${note.visibility}`)}
+              </span>
+            </>
+          ) : (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">{t(`visibility.${note.visibility}`)}</span>
+          )}
+          {!note.parent_id && canEdit && !viewingRevision && folders && (
             <select
-              value={note.visibility}
-              onChange={(e) => saveVisibility(e.target.value as Visibility)}
-              disabled={visibilitySaving}
+              value={note.folder_id ?? "unfiled"}
+              onChange={(e) => saveFolder(e.target.value)}
+              disabled={folderSaving}
               className="print:hidden text-xs px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 border-none focus:outline-none focus:ring-1 focus:ring-[var(--tnotes-400,#fb7185)] disabled:opacity-50"
             >
-              <option value="private">{t("visibility.private")}</option>
-              <option value="team">{t("visibility.team")}</option>
-              <option value="organization">{t("visibility.organization")}</option>
+              <option value="unfiled">{t("folderUnfiled")}</option>
+              {folders.map((folder) => (
+                <option key={folder.id} value={folder.id}>
+                  {folder.name}
+                </option>
+              ))}
             </select>
-            <span className="hidden print:inline-block text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
-              {t(`visibility.${note.visibility}`)}
+          )}
+          {!note.parent_id && note.folder_id && (!canEdit || viewingRevision) && folders?.find((f) => f.id === note.folder_id) && (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
+              {folders.find((f) => f.id === note.folder_id)!.name}
             </span>
-          </>
-        ) : (
-          <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">{t(`visibility.${note.visibility}`)}</span>
-        )}
-        {!note.parent_id && canEdit && !viewingRevision && folders && (
-          <select
-            value={note.folder_id ?? "unfiled"}
-            onChange={(e) => saveFolder(e.target.value)}
-            disabled={folderSaving}
-            className="print:hidden text-xs px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 border-none focus:outline-none focus:ring-1 focus:ring-[var(--tnotes-400,#fb7185)] disabled:opacity-50"
-          >
-            <option value="unfiled">{t("folderUnfiled")}</option>
-            {folders.map((folder) => (
-              <option key={folder.id} value={folder.id}>
-                {folder.name}
-              </option>
-            ))}
-          </select>
-        )}
-        {!note.parent_id && note.folder_id && (!canEdit || viewingRevision) && folders?.find((f) => f.id === note.folder_id) && (
-          <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
-            {folders.find((f) => f.id === note.folder_id)!.name}
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs text-slate-400">
+          <span className="whitespace-nowrap">
+            {t("editedBy", { name: resolveAuthor(note.created_by, note.team_id, note) })} · {new Date(note.created_at).toLocaleString()}
           </span>
-        )}
-        <span className="text-xs text-slate-400">
-          {t("editedBy", { name: resolveAuthor(note.created_by, note.team_id, note) })} · {new Date(note.created_at).toLocaleString()}
-        </span>
-        <div className="flex-1" />
-        {latestRevision && !viewingRevision && (
-          <span className="text-xs text-slate-400">
-            {t("version", { n: latestRevision.version })}
-            {editedSinceLastVersion && ` · ${t("editedSinceSave")}`}
-          </span>
-        )}
-        <IconButton title={t("versionHistory")} onClick={() => setHistoryOpen(true)}>
-          {historyIcon}
-        </IconButton>
-        {canEdit && !viewingRevision && (
-          <IconButton title={t("createVersion")} onClick={saveAsVersion} disabled={creatingVersion}>
-            {saveVersionIcon}
+          {latestRevision && !viewingRevision && (
+            <span className="whitespace-nowrap">
+              {t("version", { n: latestRevision.version })}
+              {editedSinceLastVersion && ` · ${t("editedSinceSave")}`}
+            </span>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center justify-end gap-1">
+          <IconButton title={t("versionHistory")} onClick={() => setHistoryOpen(true)}>
+            {historyIcon}
           </IconButton>
-        )}
-        {canEdit && !editing && !viewingRevision && (
-          <IconButton title={t("edit")} onClick={() => setEditing(true)}>
-            {editIcon}
+          {canEdit && !viewingRevision && (
+            <IconButton title={t("createVersion")} onClick={saveAsVersion} disabled={creatingVersion}>
+              {saveVersionIcon}
+            </IconButton>
+          )}
+          {canEdit && !editing && !viewingRevision && (
+            <IconButton title={t("edit")} onClick={() => setEditing(true)}>
+              {editIcon}
+            </IconButton>
+          )}
+          {canEdit && !viewingRevision && (
+            <IconButton title={t("deleteNote")} onClick={() => setDeleteModalOpen(true)} danger>
+              {deleteIcon}
+            </IconButton>
+          )}
+          <div className="w-px h-4 bg-slate-200 print:hidden" />
+          <IconButton title={t("exportMarkdown")} onClick={exportMarkdown}>
+            {downloadMarkdownIcon}
           </IconButton>
-        )}
-        {canEdit && !viewingRevision && (
-          <IconButton title={t("deleteNote")} onClick={() => setDeleteModalOpen(true)} danger>
-            {deleteIcon}
+          <IconButton title={t("exportHtml")} onClick={exportHtml}>
+            {downloadHtmlIcon}
           </IconButton>
-        )}
-        <div className="w-px h-4 bg-slate-200 print:hidden" />
-        <IconButton title={t("exportMarkdown")} onClick={exportMarkdown}>
-          {downloadMarkdownIcon}
-        </IconButton>
-        <IconButton title={t("exportHtml")} onClick={exportHtml}>
-          {downloadHtmlIcon}
-        </IconButton>
-        <IconButton title={t("exportPdf")} onClick={exportPdf}>
-          {printIcon}
-        </IconButton>
+          <IconButton title={t("exportPdf")} onClick={exportPdf}>
+            {printIcon}
+          </IconButton>
+        </div>
       </div>
 
       {viewingRevision && (
@@ -548,7 +563,7 @@ export default function TackNoteThread({
           </div>
         </div>
       ) : (
-        <div className={viewingRevision ? "rounded-lg bg-amber-50/50 border border-amber-100 p-3" : undefined}>
+        <div className={`min-w-0 overflow-x-auto ${viewingRevision ? "rounded-lg bg-amber-50/50 border border-amber-100 p-3" : ""}`}>
           <NoteMarkdown body={displayedBody} />
         </div>
       )}
@@ -685,46 +700,50 @@ function ReplyItem({ reply, authorName, canEdit, onSave, onDelete, onCreateVersi
   }
 
   return (
-    <div className="pl-4 border-l-2 border-slate-200">
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-slate-400">
+    <div className="pl-4 border-l-2 border-slate-200 min-w-0">
+      {/* Byline on its own line, actions on theirs -- the indent already
+          eats width here, so packing both into one non-wrapping row is
+          exactly what breaks first in a narrow embedded panel. */}
+      <div className="space-y-1">
+        <span className="block text-xs text-slate-400 whitespace-nowrap overflow-hidden text-ellipsis">
           {authorName} · {new Date(reply.created_at).toLocaleString()}
         </span>
-        <div className="flex-1" />
-        {!confirmingDelete && (
-          <IconButton title={t("history")} onClick={() => setHistoryOpen(true)}>
-            {historyIcon}
-          </IconButton>
-        )}
-        {canEdit && !editing && !confirmingDelete && (
-          <>
-            <IconButton title={t("createVersion")} onClick={handleCreateVersion} disabled={creatingVersion}>
-              {saveVersionIcon}
+        <div className="flex flex-wrap items-center gap-1">
+          {!confirmingDelete && (
+            <IconButton title={t("history")} onClick={() => setHistoryOpen(true)}>
+              {historyIcon}
             </IconButton>
-            <IconButton title={t("edit")} onClick={() => setEditing(true)}>
-              {editIcon}
-            </IconButton>
-            <IconButton title={t("delete")} onClick={() => setConfirmingDelete(true)} danger>
-              {deleteIcon}
-            </IconButton>
-          </>
-        )}
-        {confirmingDelete && (
-          <>
-            <span className="text-xs text-slate-500">{t("deleteConfirm")}</span>
-            <button type="button" onClick={() => setConfirmingDelete(false)} disabled={deleting} className="text-xs text-slate-400 hover:text-slate-600">
-              {t("deleteCancel")}
-            </button>
-            <button
-              type="button"
-              onClick={handleDelete}
-              disabled={deleting}
-              className="text-xs text-red-600 hover:text-red-800 font-medium disabled:opacity-50"
-            >
-              {deleting ? t("saving") : t("delete")}
-            </button>
-          </>
-        )}
+          )}
+          {canEdit && !editing && !confirmingDelete && (
+            <>
+              <IconButton title={t("createVersion")} onClick={handleCreateVersion} disabled={creatingVersion}>
+                {saveVersionIcon}
+              </IconButton>
+              <IconButton title={t("edit")} onClick={() => setEditing(true)}>
+                {editIcon}
+              </IconButton>
+              <IconButton title={t("delete")} onClick={() => setConfirmingDelete(true)} danger>
+                {deleteIcon}
+              </IconButton>
+            </>
+          )}
+          {confirmingDelete && (
+            <>
+              <span className="text-xs text-slate-500">{t("deleteConfirm")}</span>
+              <button type="button" onClick={() => setConfirmingDelete(false)} disabled={deleting} className="text-xs text-slate-400 hover:text-slate-600">
+                {t("deleteCancel")}
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={deleting}
+                className="text-xs text-red-600 hover:text-red-800 font-medium disabled:opacity-50"
+              >
+                {deleting ? t("saving") : t("delete")}
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {error && <p className="text-xs text-red-600">{error}</p>}
@@ -755,7 +774,9 @@ function ReplyItem({ reply, authorName, canEdit, onSave, onDelete, onCreateVersi
           </div>
         </div>
       ) : (
-        <NoteMarkdown body={reply.body_markdown} />
+        <div className="min-w-0 overflow-x-auto">
+          <NoteMarkdown body={reply.body_markdown} />
+        </div>
       )}
 
       {historyOpen && <VersionHistory api={api} noteId={reply.id} canEdit={canEdit} onClose={() => setHistoryOpen(false)} t={t} />}
