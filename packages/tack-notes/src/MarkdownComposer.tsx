@@ -54,7 +54,7 @@ export default function MarkdownComposer({ value, onChange, placeholder, disable
             placeholder={placeholder}
             disabled={disabled}
             rows={rows}
-            className="w-full rounded-b border border-slate-200 px-3 py-2 text-sm font-mono focus:border-[var(--tnotes-400,#fb7185)] focus:outline-none focus:ring-1 focus:ring-[var(--tnotes-400,#fb7185)]"
+            className="box-border w-full rounded-b border border-slate-200 px-3 py-2 text-sm font-mono focus:border-[var(--tnotes-400,#fb7185)] focus:outline-none focus:ring-1 focus:ring-[var(--tnotes-400,#fb7185)]"
           />
         </div>
       )}

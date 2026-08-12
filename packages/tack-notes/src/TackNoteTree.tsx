@@ -345,7 +345,7 @@ export default function TackNoteTree({
           onChange={(e) => setNewTitle(e.target.value)}
           placeholder={tNotes("titlePlaceholder")}
           disabled={creatingNote}
-          className="w-full text-sm rounded border border-slate-200 px-2 py-1 focus:border-[var(--tnotes-400,#fb7185)] focus:outline-none focus:ring-1 focus:ring-[var(--tnotes-400,#fb7185)]"
+          className="box-border w-full text-sm rounded border border-slate-200 px-2 py-1 focus:border-[var(--tnotes-400,#fb7185)] focus:outline-none focus:ring-1 focus:ring-[var(--tnotes-400,#fb7185)]"
         />
         <select
           value={newVisibility}
@@ -432,7 +432,7 @@ export default function TackNoteTree({
             }}
             onBlur={() => handleRename(folder)}
             disabled={renaming}
-            className="w-full text-sm rounded border border-slate-200 px-1.5 py-0.5 focus:border-[var(--tnotes-400,#fb7185)] focus:outline-none"
+            className="box-border w-full text-sm rounded border border-slate-200 px-1.5 py-0.5 focus:border-[var(--tnotes-400,#fb7185)] focus:outline-none"
           />
         </div>
       );
@@ -487,11 +487,11 @@ export default function TackNoteTree({
             }}
             disabled={savingFolder}
             placeholder={t("newFolderName")}
-            className="w-full text-sm rounded border border-slate-200 px-1.5 py-0.5 focus:border-[var(--tnotes-400,#fb7185)] focus:outline-none"
+            className="box-border w-full text-sm rounded border border-slate-200 px-1.5 py-0.5 focus:border-[var(--tnotes-400,#fb7185)] focus:outline-none"
           />
         </div>
       ) : (
-        <button type="button" onClick={() => setCreatingFolder(true)} className="w-full text-left px-2.5 py-1 text-xs font-medium text-[var(--tnotes-700,#be123c)] hover:underline">
+        <button type="button" onClick={() => setCreatingFolder(true)} className="box-border w-full text-left px-2.5 py-1 text-xs font-medium text-[var(--tnotes-700,#be123c)] hover:underline">
           + {t("newFolder")}
         </button>
       )}
