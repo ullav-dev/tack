@@ -90,7 +90,23 @@ export interface AttachRequest {
 }
 
 export interface TackNotesApi {
-  listNotes(teamId: string, opts?: { limit?: number; offset?: number; folderId?: string; unfiled?: boolean }): Promise<NotesPage>;
+  listNotes(
+    teamId: string,
+    opts?: {
+      limit?: number;
+      offset?: number;
+      folderId?: string;
+      unfiled?: boolean;
+      /** Opaque host-defined filter key, layered on top of folderId/unfiled
+       * (e.g. cartlann's "shared-by-me"/"shared-by-others" virtual smart-
+       * folders, which have no tack-native concept at all). The real
+       * `createTackNotesApi` implementation below ignores this entirely --
+       * tack-server has no such filter -- so it only has an effect behind a
+       * host's own hybrid adapter (see `tack-notes-adapter.ts` in
+       * ullav-collection-browser for the reference implementation). */
+      filterKey?: string;
+    }
+  ): Promise<NotesPage>;
   getNote(id: string): Promise<Note>;
   createNote(payload: {
     team_id: string;
@@ -99,13 +115,30 @@ export interface TackNotesApi {
     body_markdown: string;
     folder_id?: string;
     attach?: AttachRequest;
+    /** Opaque host-defined extra fields merged into the request by a
+     * host's own hybrid adapter (e.g. cartlann's `description` and
+     * `object_ids`, neither of which tack-server's own schema has). The
+     * real `createTackNotesApi` implementation strips this before sending
+     * -- tack-server's own `POST /notes` contract is untouched by this. */
+    extra?: Record<string, unknown>;
   }): Promise<Note>;
   /** Top-level notes attached to an external entity (e.g. a cunav ticket, a
    * togra workflow), oldest-first -- see tack-server's `GET /notes/by-entity`.
    * Not paginated: entity-attached note counts are small in practice (a
    * thread per ticket, not a team-wide list), unlike `listNotes`. */
   listNotesByAttachment(owningService: string, entityType: string, entityId: string): Promise<Note[]>;
-  updateNote(id: string, payload: { title?: string; body_markdown?: string; visibility?: Visibility; folder_id?: string | null }): Promise<Note>;
+  updateNote(
+    id: string,
+    payload: {
+      title?: string;
+      body_markdown?: string;
+      visibility?: Visibility;
+      folder_id?: string | null;
+      /** See `createNote`'s own `extra` doc comment -- same passthrough,
+       * same real-impl strip-before-send behavior. */
+      extra?: Record<string, unknown>;
+    }
+  ): Promise<Note>;
   deleteNote(id: string): Promise<void>;
   listReplies(id: string): Promise<Note[]>;
   createReply(id: string, bodyMarkdown: string): Promise<Note>;
@@ -158,15 +191,17 @@ export function createTackNotesApi(base: string, token: string): TackNotesApi {
       if (opts.offset !== undefined) params.set("offset", String(opts.offset));
       if (opts.folderId) params.set("folder_id", opts.folderId);
       else if (opts.unfiled) params.set("unfiled", "true");
+      // opts.filterKey is a host-adapter-only concern -- tack-server has no
+      // such filter, so it's deliberately never added to the query string.
       return req(`/notes?${params.toString()}`);
     },
     getNote: (id) => req(`/notes/${id}`),
-    createNote: (payload) => req("/notes", { method: "POST", body: JSON.stringify(payload) }),
+    createNote: ({ extra: _extra, ...payload }) => req("/notes", { method: "POST", body: JSON.stringify(payload) }),
     listNotesByAttachment(owningService, entityType, entityId) {
       const params = new URLSearchParams({ owning_service: owningService, entity_type: entityType, entity_id: entityId });
       return req(`/notes/by-entity?${params.toString()}`);
     },
-    updateNote: (id, payload) => req(`/notes/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+    updateNote: (id, { extra: _extra, ...payload }) => req(`/notes/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
     deleteNote: (id) => req(`/notes/${id}`, { method: "DELETE" }),
     listReplies: (id) => req(`/notes/${id}/replies`),
     createReply: (id, bodyMarkdown) => req(`/notes/${id}/replies`, { method: "POST", body: JSON.stringify({ body_markdown: bodyMarkdown }) }),

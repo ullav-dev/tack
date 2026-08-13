@@ -174,3 +174,36 @@ proved necessary:
 - `renderNoteActions(note)` — extra per-row actions (e.g. cunav's
   "send as email"); clicks inside it don't select the row.
 - `ImagePicker` — same contract as `TackNoteThread`'s.
+- `initialDraft` / `onInitialDraftConsumed` — opens the new-note form
+  pre-filled (e.g. a sibling panel's "save this AI response as a note"
+  hand-off). See the prop's own doc comment for the consume-once contract.
+- `listMode` (default `"entity"`) — `"entity"` is the original behavior:
+  one unpaginated fetch via `listNotesByAttachment`, filtered client-side.
+  `"team"` is a team-wide, paginated browse instead (own `Pager`), fetched
+  via `listNotes` with server-side folder/chip scoping — for a host with no
+  single entity to scope to (e.g. cartlann's whole-team research-notes
+  browse). `owningService`/`entityType`/`entityId` are still required by
+  the type but go unused for listing in this mode.
+- `filterChips` — replaces the built-in "all"/"mine"/"shared" chip bar with
+  a host-defined set. A chip's `key` doubles as `listNotes`'s own
+  `filterKey` in `listMode="team"` (see `FilterChip`'s own doc comment for
+  the reserved `"unfiled"` key).
+- `renderDetailBadges(note)` / `renderDetailHeaderActions(note)` /
+  `deleteWarning(note)` / `renderComposerExtra(mode, note)` /
+  `onBeforeSave(mode, note)` — threaded straight through to
+  `TackNoteThread`'s own same-named props (see its doc comments) for the
+  create form as well as the edit one; `mode` is `"create"` (`note` is
+  `undefined`) or `"edit"`.
+
+## `TackNoteThread` extension points
+
+Beyond the props documented on the type itself: `renderDetailExtra(note)`
+renders below the body (view-only); `renderDetailBadges(note)` renders
+alongside the visibility/folder chips; `renderDetailHeaderActions(note)`
+adds actions to the header icon row; `deleteWarning(note)` overrides the
+delete-confirmation copy; `renderComposerExtra(note)` renders inside the
+edit-note composer; `onBeforeSave(note)` merges extra fields into the
+`updateNote` call. All are host-specific escape hatches this package has no
+opinion on the content of (see `api.ts`'s `extra` field doc comment) —
+built for cartlann's object-link editor, IIIF badges, and "Dig Deeper"
+hand-off, but generic to any host with similar needs.

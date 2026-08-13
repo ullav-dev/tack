@@ -6,14 +6,34 @@ import type { Note, NoteFolder, TackNotesApi, Visibility } from "./api";
 import TackNoteThread from "./TackNoteThread";
 import MarkdownComposer from "./MarkdownComposer";
 import ResizableSplit from "./ResizableSplit";
+import Pager from "./Pager";
 import { plusIcon, noteIcon, folderIcon, editIcon, deleteIcon, IconButton } from "./Icon";
 import type { TFunction } from "./types";
 
 type FolderFilter = "all" | "mine" | "shared" | string;
 
+export interface FilterChip {
+  key: string;
+  label: string;
+  /** Client-side predicate, used only in `listMode="entity"` (the default),
+   * where the whole list is already fetched and chip-filtering happens in
+   * the browser. Omit for a chip meaning "no filter" (e.g. "all"). In
+   * `listMode="team"`, filtering happens server-side instead -- `key` is
+   * sent as `listNotes`'s own `filterKey` (see `api.ts`), and this
+   * predicate is never called. The one reserved key, `"unfiled"`, is
+   * special-cased in `listMode="team"` to `listNotes({ unfiled: true })`
+   * instead of `filterKey` -- give it whatever `predicate` makes sense for
+   * `listMode="entity"` (typically `(n) => n.folder_id === null`). */
+  predicate?: (note: Note, currentUserId: string) => boolean;
+}
+
 // See folderScope="team"'s doc comment above -- matches the limit togra's
 // own prior chip bar effectively had (it fetched everything, unpaginated).
 const TEAM_FOLDERS_LIMIT = 200;
+
+// listMode="team" page size for the notes list itself (distinct from
+// TEAM_FOLDERS_LIMIT above, which is folders, always fetched in one page).
+const TEAM_NOTES_PAGE_SIZE = 25;
 
 export interface TackNotesPanelProps {
   api: TackNotesApi;
@@ -103,6 +123,37 @@ export interface TackNotesPanelProps {
    * clobbered by a stale draft). */
   initialDraft?: { title?: string; body_markdown: string } | null;
   onInitialDraftConsumed?: () => void;
+  /** "entity" (default): the existing behavior -- one unpaginated fetch via
+   * `listNotesByAttachment`, filtered client-side by `filterChips`. "team":
+   * a team-wide, paginated browse instead, fetched via `listNotes` with
+   * server-side folder/filter-chip scoping (`owningService`/`entityType`/
+   * `entityId` are still required by the type but go otherwise unused for
+   * listing in this mode -- e.g. cartlann's whole-team research-notes
+   * browse, which has no single entity to scope to). */
+  listMode?: "entity" | "team";
+  /** Replaces the built-in "all"/"mine"/"shared" chip bar. Leave unset for
+   * the default three. A chip's `key` doubles as `listNotes`'s own
+   * `filterKey` in `listMode="team"` -- see `FilterChip`'s own doc
+   * comment for the `"unfiled"` special case. */
+  filterChips?: FilterChip[];
+  /** Renders arbitrary host-specific badges next to a selected note's own
+   * visibility/folder chips, e.g. cartlann's "IIIF" badge. Threaded
+   * straight through to `TackNoteThread`'s own `renderDetailBadges`. */
+  renderDetailBadges?: (note: Note) => ReactNode;
+  /** Extra actions in a selected note's header icon row, e.g. cartlann's
+   * "Dig Deeper". Threaded straight through to `TackNoteThread`'s own
+   * `renderDetailHeaderActions`. */
+  renderDetailHeaderActions?: (note: Note) => ReactNode;
+  /** Overrides the delete-confirmation copy for a specific note. Threaded
+   * straight through to `TackNoteThread`'s own `deleteWarning`. */
+  deleteWarning?: (note: Note) => ReactNode | undefined;
+  /** Renders host-specific fields inside the create-note form (`mode ===
+   * "create"`, `note` is `undefined`) and, threaded through to
+   * `TackNoteThread`, the edit-note form (`mode === "edit"`). */
+  renderComposerExtra?: (mode: "create" | "edit", note: Note | undefined) => ReactNode;
+  /** Called just before a note is created or saved; anything it returns is
+   * merged into `createNote`/`updateNote`'s own `extra` field. */
+  onBeforeSave?: (mode: "create" | "edit", note: Note | undefined) => Record<string, unknown> | Promise<Record<string, unknown>>;
 }
 
 /** An embeddable "notes attached to one entity" widget -- list + inline
@@ -142,12 +193,29 @@ export default function TackNotesPanel({
   ImagePicker,
   initialDraft,
   onInitialDraftConsumed,
+  listMode = "entity",
+  filterChips,
+  renderDetailBadges,
+  renderDetailHeaderActions,
+  deleteWarning,
+  renderComposerExtra,
+  onBeforeSave,
 }: TackNotesPanelProps) {
   const { subscribe, subscribeDeleted, subscribeRefresh } = useNoteEvents();
+
+  const chips: FilterChip[] =
+    filterChips ??
+    [
+      { key: "all", label: t("folderFilterAll") },
+      { key: "mine", label: t("folderFilterMine"), predicate: (n, uid) => n.created_by === uid },
+      { key: "shared", label: t("folderFilterShared"), predicate: (n) => n.visibility !== "private" },
+    ];
 
   const [notes, setNotes] = useState<Note[] | null>(null);
   const [folders, setFolders] = useState<NoteFolder[]>([]);
   const [activeFolder, setActiveFolder] = useState<FolderFilter>("all");
+  const [page, setPage] = useState(1);
+  const [totalNotes, setTotalNotes] = useState(0);
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
@@ -179,6 +247,21 @@ export default function TackNotesPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialDraft]);
 
+  /** `listMode="team"` only -- maps the active chip/folder to `listNotes`'s
+   * own folder_id/unfiled/filterKey params. `"unfiled"` is the one reserved
+   * chip key (see `FilterChip`'s doc comment); any other non-"all" chip key
+   * that isn't a real folder id is sent through opaquely as `filterKey`. */
+  function teamListOpts(offset: number) {
+    const opts: { limit: number; offset: number; folderId?: string; unfiled?: boolean; filterKey?: string } = {
+      limit: TEAM_NOTES_PAGE_SIZE,
+      offset,
+    };
+    if (folders.some((f) => f.id === activeFolder)) opts.folderId = activeFolder;
+    else if (activeFolder === "unfiled") opts.unfiled = true;
+    else if (activeFolder !== "all") opts.filterKey = activeFolder;
+    return opts;
+  }
+
   async function load(silent = false) {
     if (!silent) setError(null);
     try {
@@ -186,6 +269,31 @@ export default function TackNotesPanel({
         folderScope === "team"
           ? api.listNoteFolders(teamId, { limit: TEAM_FOLDERS_LIMIT }).then((p) => p.folders)
           : api.listNoteFoldersByAttachment(owningService, entityType, entityId);
+
+      if (listMode === "team") {
+        const [result] = await Promise.all([
+          api.listNotes(teamId, teamListOpts((page - 1) * TEAM_NOTES_PAGE_SIZE)),
+          showFolders
+            ? loadFolders()
+                .then((f) => setFolders([...f].sort((a, b) => a.name.localeCompare(b.name))))
+                .catch(() => {
+                  /* Non-fatal: folder chrome just won't offer choices. */
+                })
+            : Promise.resolve(),
+        ]);
+        setNotes(result.notes);
+        setTotalNotes(result.total);
+        if (showUnreadBadges && result.notes.length > 0) {
+          api
+            .listUnread(result.notes.map((n) => n.id))
+            .then((statuses) => setUnread(Object.fromEntries(statuses.map((s) => [s.note_id, s.unread]))))
+            .catch(() => {
+              /* Non-fatal: the list still renders, just without unread dots. */
+            });
+        }
+        return result.notes;
+      }
+
       const [result] = await Promise.all([
         api.listNotesByAttachment(owningService, entityType, entityId),
         showFolders
@@ -214,8 +322,11 @@ export default function TackNotesPanel({
 
   // Re-fetches (and drops any selection) whenever the panel is pointed at a
   // different entity -- selection from a previously-viewed ticket must never
-  // leak into the next one's detail pane.
+  // leak into the next one's detail pane. listMode="team" has no single
+  // entity to key off of -- the effect below handles its fetch/reset
+  // instead, keyed off teamId/activeFolder/page.
   useEffect(() => {
+    if (listMode === "team") return;
     let cancelled = false;
     setNotes(null);
     setFolders([]);
@@ -231,6 +342,26 @@ export default function TackNotesPanel({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [owningService, entityType, entityId]);
+
+  // listMode="team" equivalent of the effect above -- fetches (and
+  // paginates/filters server-side) whenever the team, active chip/folder,
+  // or page changes. Selection is intentionally left alone on a page/filter
+  // change (unlike the entity-switch effect) -- a note picked from page 1
+  // stays open while browsing, matching `TackNoteTree`'s own behavior.
+  useEffect(() => {
+    if (listMode !== "team") return;
+    let cancelled = false;
+    setNotes(null);
+    load().then((result) => {
+      if (!cancelled && autoSelectFirst && page === 1 && activeFolder === "all" && result && result.length > 0) {
+        setSelectedId((prev) => prev ?? result[0].id);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listMode, teamId, activeFolder, page]);
 
   useEffect(() => {
     if (refreshSignal === undefined) return;
@@ -257,23 +388,39 @@ export default function TackNotesPanel({
     if ((!autoTitle && !newTitle.trim()) || !newBody.trim()) return;
     setSubmitting(true);
     try {
+      const extra = onBeforeSave ? await onBeforeSave("create", undefined) : undefined;
       const note = await api.createNote({
         team_id: teamId,
         visibility: newVisibility,
         title: autoTitle ?? newTitle.trim(),
         body_markdown: newBody.trim(),
         attach: { owning_service: owningService, entity_type: entityType, entity_id: entityId },
+        ...(extra ? { extra } : {}),
       });
-      setNotes((prev) => [...(prev ?? []), note]);
       setNewTitle("");
       setNewBody("");
       setCreating(false);
       setSelectedId(note.id);
+      if (listMode === "team") {
+        // Re-fetches the current page from the server rather than
+        // optimistically appending -- a paginated, filtered list can't
+        // locally guess whether the new note actually belongs on this page.
+        await load();
+      } else {
+        setNotes((prev) => [...(prev ?? []), note]);
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setSubmitting(false);
     }
+  }
+
+  /** Resets to page 1 whenever the active chip/folder changes (`listMode=
+   * "team"` only -- entity mode has no pagination to reset). */
+  function selectFolder(key: FolderFilter) {
+    setActiveFolder(key);
+    setPage(1);
   }
 
   async function submitNewFolder() {
@@ -312,18 +459,24 @@ export default function TackNotesPanel({
       await api.deleteNoteFolder(folder.id);
       setFolders((prev) => prev.filter((f) => f.id !== folder.id));
       setNotes((prev) => (prev ? prev.map((n) => (n.folder_id === folder.id ? { ...n, folder_id: null } : n)) : prev));
-      if (activeFolder === folder.id) setActiveFolder("all");
+      if (activeFolder === folder.id) selectFolder("all");
     } catch (e) {
       setError((e as Error).message);
     }
   }
 
-  const filteredNotes = (notes ?? []).filter((n) => {
-    if (activeFolder === "all") return true;
-    if (activeFolder === "mine") return n.created_by === currentUserId;
-    if (activeFolder === "shared") return n.visibility !== "private";
-    return n.folder_id === activeFolder;
-  });
+  // listMode="team" is already server-filtered/paginated by teamListOpts --
+  // filtering again here would double-apply it and drop notes whose page
+  // was fetched under a different chip's predicate.
+  const filteredNotes =
+    listMode === "team"
+      ? notes ?? []
+      : (notes ?? []).filter((n) => {
+          if (activeFolder === "all") return true;
+          const chip = chips.find((c) => c.key === activeFolder);
+          if (chip) return chip.predicate ? chip.predicate(n, currentUserId) : true;
+          return n.folder_id === activeFolder;
+        });
 
   function handleSelect(id: string) {
     setSelectedId(id);
@@ -360,6 +513,7 @@ export default function TackNotesPanel({
                 t={t}
                 ImagePicker={ImagePicker}
               />
+              {renderComposerExtra?.("create", undefined)}
               <div className="flex items-center gap-2">
                 <select
                   value={newVisibility}
@@ -409,16 +563,16 @@ export default function TackNotesPanel({
 
       {showFolders && notes !== null && (
         <div className="flex items-center gap-1 overflow-x-auto px-2 py-1.5 border-b border-slate-100 shrink-0 print:hidden">
-          {(["all", "mine", "shared"] as const).map((key) => (
+          {chips.map(({ key, label }) => (
             <button
               key={key}
               type="button"
-              onClick={() => setActiveFolder(key)}
+              onClick={() => selectFolder(key)}
               className={`shrink-0 text-xs px-2 py-1 rounded-full transition-colors whitespace-nowrap ${
                 activeFolder === key ? "bg-[var(--tnotes-100,#ffe4e6)] text-[var(--tnotes-700,#be123c)] font-medium" : "text-slate-500 hover:bg-slate-100"
               }`}
             >
-              {t(key === "all" ? "folderFilterAll" : key === "mine" ? "folderFilterMine" : "folderFilterShared")}
+              {label}
             </button>
           ))}
           {folders.length > 0 && <span className="text-slate-200 shrink-0">|</span>}
@@ -444,7 +598,7 @@ export default function TackNotesPanel({
               <div key={folder.id} className="group shrink-0 flex items-center gap-0.5">
                 <button
                   type="button"
-                  onClick={() => setActiveFolder(folder.id)}
+                  onClick={() => selectFolder(folder.id)}
                   className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full transition-colors whitespace-nowrap ${
                     activeFolder === folder.id
                       ? "bg-[var(--tnotes-100,#ffe4e6)] text-[var(--tnotes-700,#be123c)] font-medium"
@@ -555,6 +709,15 @@ export default function TackNotesPanel({
           </ul>
         )}
       </div>
+
+      {listMode === "team" && notes !== null && (
+        <Pager
+          page={page}
+          totalPages={Math.max(1, Math.ceil(totalNotes / TEAM_NOTES_PAGE_SIZE))}
+          onChange={setPage}
+          t={t}
+        />
+      )}
     </div>
   );
 
@@ -571,6 +734,11 @@ export default function TackNotesPanel({
       ImagePicker={ImagePicker}
       folders={showFolders ? folders : []}
       renderDetailExtra={renderDetailExtra}
+      renderDetailBadges={renderDetailBadges}
+      renderDetailHeaderActions={renderDetailHeaderActions}
+      deleteWarning={deleteWarning}
+      renderComposerExtra={renderComposerExtra ? (note) => renderComposerExtra("edit", note) : undefined}
+      onBeforeSave={onBeforeSave ? (note) => onBeforeSave("edit", note) : undefined}
     />
   ) : (
     <p className="p-6 text-sm text-slate-400">{t("selectNote")}</p>
