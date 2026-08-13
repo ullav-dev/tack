@@ -3,10 +3,10 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
-import type { PickedAsset } from "@ullav/dam-picker";
+import type { PickedAsset } from "@ullav-dev/dam-picker";
 
 const DamPicker = dynamic(
-  () => import("@ullav/dam-picker").then((m) => m.DamPicker),
+  () => import("@ullav-dev/dam-picker").then((m) => m.DamPicker),
   { ssr: false }
 );
 
@@ -29,9 +29,10 @@ const DEFAULT_H = 440;
 /** Draggable/resizable floating picker for embedding a Comad (DAM) asset —
  * same shell/chrome as togra's `DamPickerModal` (drag title bar, three
  * resize handles, Esc to close), just rebranded rose-700 to match the rest
- * of Tack rather than togra's violet. The underlying `@ullav/dam-picker`
- * package is Tack's own copy (per-repo-copy convention, same as togra's),
- * proxied through `/api/dam` (see `src/proxy.ts`). */
+ * of Tack rather than togra's violet (via `--tdam-*` CSS custom properties
+ * on the picker itself, not a fork — `@ullav-dev/dam-picker` is consumed
+ * from the registry like every other app; canonical source is
+ * `ullav-dam-browser`). Proxied through `/api/dam` (see `src/proxy.ts`). */
 export default function DamPickerModal({ token, onSelect, onClose }: Props) {
   const [pos, setPos] = useState(() => ({
     x: typeof window !== "undefined" ? Math.max(20, (window.innerWidth  - DEFAULT_W) / 2) : 100,
