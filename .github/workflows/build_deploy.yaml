@@ -16,6 +16,8 @@ jobs:
           node-version: '22'
       - name: Install dependencies
         run: npm install
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.PAT_CLASSIC }}
       - name: Run tests
         run: npm test
 
@@ -72,3 +74,5 @@ jobs:
           tags: |
             ghcr.io/ullav-dev/tack:${{ steps.commit.outputs.short }}
             ghcr.io/ullav-dev/tack:latest
+          secrets: |
+            npm_token=${{ secrets.PAT_CLASSIC }}
