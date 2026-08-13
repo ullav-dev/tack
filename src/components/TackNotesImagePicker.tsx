@@ -3,7 +3,7 @@
 import { useAuth } from "@/contexts/AuthContext";
 import DamPickerModal from "@/components/DamPickerModal";
 
-/** Adapts tack's own `DamPickerModal` (`@ullav/dam-picker`) to
+/** Adapts tack's own `DamPickerModal` (`@ullav-dev/dam-picker`) to
  * `@ullav-dev/tack-notes`'s generic `ImagePicker` prop shape --
  * `{onSelect: (asset: {url, name}) => void; onClose: () => void}`. Always
  * embeds the thumbnail URL, not the full asset -- same as the old

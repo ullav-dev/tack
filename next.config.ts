@@ -13,6 +13,11 @@ const gitSha: string = (() => {
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // @ullav-dev/dam-picker ships raw TS source with no build step -- unlike
+  // tack-notes (consumed here via an in-repo file: symlink, which Next
+  // already treats as first-party source), dam-picker is a real registry
+  // install, and Next excludes node_modules from transpilation by default.
+  transpilePackages: ["@ullav-dev/dam-picker"],
   env: {
     NEXT_PUBLIC_APP_VERSION: appVersion,
     NEXT_PUBLIC_GIT_SHA: gitSha,

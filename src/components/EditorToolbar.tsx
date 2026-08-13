@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { Editor } from "@tiptap/react";
 import { useEditorState } from "@tiptap/react";
-import type { PickedAsset } from "@ullav/dam-picker";
+import type { PickedAsset } from "@ullav-dev/dam-picker";
 import { useAuth } from "@/contexts/AuthContext";
 import DamPickerModal from "@/components/DamPickerModal";
 import PageReferencePickerModal from "@/components/PageReferencePickerModal";
