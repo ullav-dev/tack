@@ -1,5 +1,23 @@
 @import "tailwindcss";
+@source "../../node_modules/@ullav-dev/dam-picker/src";
 @plugin "@tailwindcss/typography";
+
+/* @ullav-dev/dam-picker's own accent chrome (selection ring, active
+   sort/page state, search focus ring, resize-handle hover) defaults to
+   Comad's blue via CSS custom properties -- override to Tack's own
+   rose-700 brand here, same values tack-notes already gets "for free"
+   (its --tnotes-* fallback defaults were chosen to match Tack's brand
+   directly, so no override was needed there). */
+:root {
+  --tdam-100: #ffe4e6;
+  --tdam-200: #fecdd3;
+  --tdam-300: #fda4af;
+  --tdam-400: #fb7185;
+  --tdam-500: #f43f5e;
+  --tdam-600: #e11d48;
+  --tdam-700: #be123c;
+  --tdam-800: #9f1239;
+}
 
 html,
 body,
