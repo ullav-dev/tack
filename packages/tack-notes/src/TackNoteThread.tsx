@@ -53,6 +53,30 @@ export interface TackNoteThreadProps {
    * what an "object link" is, so the host app owns that UI entirely and
    * just gets handed the loaded `Note` to key its own data off of. */
   renderDetailExtra?: (note: Note) => ReactNode;
+  /** Renders arbitrary host-specific badges alongside the visibility/folder
+   * chips (e.g. cartlann's "IIIF" badge + "View in IIIF Viewer" link for a
+   * note that's also a canvas annotation). Rendered even while viewing an
+   * old revision, unlike `renderDetailExtra`. */
+  renderDetailBadges?: (note: Note) => ReactNode;
+  /** Extra actions rendered in the header's icon-button row, to the left of
+   * the built-in edit/delete/export actions (e.g. cartlann's "Dig Deeper"
+   * AI hand-off). Hidden while viewing an old revision, matching the
+   * built-in edit/delete actions' own visibility rule. */
+  renderDetailHeaderActions?: (note: Note) => ReactNode;
+  /** Overrides `DeleteNoteModal`'s default confirmation copy for this
+   * specific note (e.g. cartlann's stronger warning when the note is also a
+   * IIIF canvas annotation). Return `undefined` to fall back to the default
+   * copy for a given note. */
+  deleteWarning?: (note: Note) => ReactNode | undefined;
+  /** Renders arbitrary host-specific fields inside the edit-note composer
+   * (e.g. cartlann's object-link editor, which must be editable, not just
+   * viewable via `renderDetailExtra`). */
+  renderComposerExtra?: (note: Note) => ReactNode;
+  /** Called just before an edited note is saved; anything it returns is
+   * merged into `updateNote`'s own `extra` field (see `api.ts`'s doc
+   * comment on `extra`) -- e.g. cartlann syncing `description`/`object_ids`
+   * alongside the body edit `TackNoteThread` already knows how to save. */
+  onBeforeSave?: (note: Note) => Record<string, unknown> | Promise<Record<string, unknown>>;
 }
 
 const historyIcon = (
@@ -109,6 +133,11 @@ export default function TackNoteThread({
   ImagePicker,
   folders: foldersOverride,
   renderDetailExtra,
+  renderDetailBadges,
+  renderDetailHeaderActions,
+  deleteWarning,
+  renderComposerExtra,
+  onBeforeSave,
 }: TackNoteThreadProps) {
   const { notifyNoteUpdated, notifyNoteDeleted, subscribeRefresh } = useNoteEvents();
 
@@ -270,7 +299,8 @@ export default function TackNoteThread({
     if (!note || !bodyDraft.trim()) return;
     setSaving(true);
     try {
-      const updated = await api.updateNote(note.id, { body_markdown: bodyDraft.trim() });
+      const extra = onBeforeSave ? await onBeforeSave(note) : undefined;
+      const updated = await api.updateNote(note.id, { body_markdown: bodyDraft.trim(), ...(extra ? { extra } : {}) });
       setNote(updated);
       setEditing(false);
     } catch (e) {
@@ -485,6 +515,7 @@ export default function TackNoteThread({
               {folders.find((f) => f.id === note.folder_id)!.name}
             </span>
           )}
+          {renderDetailBadges?.(note)}
         </div>
 
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs text-slate-400">
@@ -500,6 +531,7 @@ export default function TackNoteThread({
         </div>
 
         <div className="flex flex-wrap items-center justify-end gap-1">
+          {!viewingRevision && renderDetailHeaderActions?.(note)}
           <IconButton title={t("versionHistory")} onClick={() => setHistoryOpen(true)}>
             {historyIcon}
           </IconButton>
@@ -549,6 +581,7 @@ export default function TackNoteThread({
       {editing ? (
         <div className="space-y-2">
           <MarkdownComposer value={bodyDraft} onChange={setBodyDraft} disabled={saving} rows={8} t={t} ImagePicker={ImagePicker} />
+          {renderComposerExtra?.(note)}
           <div className="flex justify-end gap-2">
             <button
               type="button"
@@ -638,7 +671,14 @@ export default function TackNoteThread({
         />
       )}
 
-      {deleteModalOpen && <DeleteNoteModal onConfirm={deleteThisNote} onCancel={() => setDeleteModalOpen(false)} t={t} />}
+      {deleteModalOpen && (
+        <DeleteNoteModal
+          onConfirm={deleteThisNote}
+          onCancel={() => setDeleteModalOpen(false)}
+          t={t}
+          bodyOverride={deleteWarning?.(note)}
+        />
+      )}
 
       {pendingExport && viewingRevision && (
         <ConfirmExportOldVersionModal version={viewingRevision.version} onConfirm={confirmPendingExport} onCancel={() => setPendingExport(null)} t={t} />

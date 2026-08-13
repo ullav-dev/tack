@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { TFunction } from "./types";
 
 interface Props {
@@ -9,13 +9,18 @@ interface Props {
   /** Calls `t("deleteNoteConfirmTitle")`, `t("deleteNoteConfirmBody")`,
    * `t("deleteCancel")`, `t("deleteNote")`, `t("saving")`. */
   t: TFunction;
+  /** Replaces the default `t("deleteNoteConfirmBody")` copy, e.g. cartlann's
+   * stronger warning for a note that's also a IIIF canvas annotation
+   * ("deleting this also removes the annotation marker from the image
+   * viewer"). Leave unset for the default copy. */
+  bodyOverride?: ReactNode;
 }
 
 /** Confirmation dialog for deleting a note -- extracted verbatim from
  * `tack`'s own `DeleteNoteModal.tsx`. Not `window.confirm`, so a
  * destructive action that also cascades to every saved version and reply
  * gets a properly themed, explicit warning. */
-export default function DeleteNoteModal({ onConfirm, onCancel, t }: Props) {
+export default function DeleteNoteModal({ onConfirm, onCancel, t, bodyOverride }: Props) {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,7 +53,7 @@ export default function DeleteNoteModal({ onConfirm, onCancel, t }: Props) {
         </div>
 
         <div className="px-6 py-5 space-y-3">
-          <p className="text-sm text-slate-600">{t("deleteNoteConfirmBody")}</p>
+          <p className="text-sm text-slate-600">{bodyOverride ?? t("deleteNoteConfirmBody")}</p>
           {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
         </div>
 
