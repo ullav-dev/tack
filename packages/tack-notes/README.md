@@ -161,6 +161,11 @@ proved necessary:
   "list, then detail in its place" layout.
 - `autoSelectFirst` (default `false`) — select the first note once the
   initial list loads.
+- `initialSelectedNoteId` — selects this specific note once the initial
+  list loads (`listMode="team"` fetches it directly by id, so it doesn't
+  need to be on the first page), for a host's own deep link to one note.
+  Takes priority over `autoSelectFirst` when both are set. Consumed once,
+  same as `autoSelectFirst`.
 - `defaultVisibility` (default `"team"`) — preselected in the new-note form.
 - `autoTitle` — when set, the new-note form has no title field at all;
   every note this panel creates is titled with this fixed string instead
