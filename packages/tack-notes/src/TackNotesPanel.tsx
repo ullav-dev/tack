@@ -90,6 +90,16 @@ export interface TackNotesPanelProps {
   /** Select the first note automatically once the list loads (only on the
    * initial load -- never re-triggers after that). Default false. */
   autoSelectFirst?: boolean;
+  /** Selects this specific note once the initial list loads (only on the
+   * initial load -- never re-triggers after that, same as
+   * `autoSelectFirst`, which this takes priority over when both are set).
+   * For a host's own deep link to one note (e.g. cartlann's `?noteId=`) --
+   * this panel has no other way to open a specific note from outside,
+   * since `selectedId` itself is fully internal/uncontrolled. Selecting a
+   * note that isn't on the first fetched page (or doesn't exist/isn't
+   * visible to the caller) is a silent no-op, same as a stale
+   * `autoSelectFirst` result would be. */
+  initialSelectedNoteId?: string;
   /** Visibility offered by default in the new-note form. Default "team". */
   defaultVisibility?: Visibility;
   /** When set, the new-note form has no title field at all -- every note
@@ -184,6 +194,7 @@ export default function TackNotesPanel({
   compact = false,
   twoColumn = false,
   autoSelectFirst = false,
+  initialSelectedNoteId,
   defaultVisibility = "team",
   autoTitle,
   showUnreadBadges = true,
@@ -333,7 +344,10 @@ export default function TackNotesPanel({
     setActiveFolder("all");
     setSelectedId(null);
     load().then((result) => {
-      if (!cancelled && autoSelectFirst && result && result.length > 0) {
+      if (cancelled || !result || result.length === 0) return;
+      if (initialSelectedNoteId && result.some((n) => n.id === initialSelectedNoteId)) {
+        setSelectedId(initialSelectedNoteId);
+      } else if (autoSelectFirst) {
         setSelectedId(result[0].id);
       }
     });
@@ -353,7 +367,7 @@ export default function TackNotesPanel({
     let cancelled = false;
     setNotes(null);
     load().then((result) => {
-      if (!cancelled && autoSelectFirst && page === 1 && activeFolder === "all" && result && result.length > 0) {
+      if (!cancelled && autoSelectFirst && !initialSelectedNoteId && page === 1 && activeFolder === "all" && result && result.length > 0) {
         setSelectedId((prev) => prev ?? result[0].id);
       }
     });
@@ -362,6 +376,30 @@ export default function TackNotesPanel({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listMode, teamId, activeFolder, page]);
+
+  // listMode="team" has no first-page guarantee the way the entity-mode
+  // effect above does -- the deep-linked note could be filed in any folder,
+  // possibly not even on this list's first fetched page under the default
+  // "all" filter. Fetched directly by id instead of hoping it's in `notes`.
+  // Once only, on mount -- a later prop change is never re-applied (same
+  // consume-once contract as `initialDraft`).
+  useEffect(() => {
+    if (listMode !== "team" || !initialSelectedNoteId) return;
+    let cancelled = false;
+    api
+      .getNote(initialSelectedNoteId)
+      .then(() => {
+        if (!cancelled) setSelectedId(initialSelectedNoteId);
+      })
+      .catch(() => {
+        /* Note doesn't exist or isn't visible to this caller -- silent
+         * no-op, same as a stale autoSelectFirst result would be. */
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (refreshSignal === undefined) return;
