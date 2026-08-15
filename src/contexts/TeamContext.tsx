@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import type { TeamSummary } from "@/lib/types";
-import { getMyTeams, getTackTeamIds } from "@/lib/auth-api";
+import { getMyTeams } from "@/lib/auth-api";
 import { useAuth } from "./AuthContext";
 
 const ACTIVE_TEAM_KEY = "tack_active_team_id";
@@ -47,9 +47,9 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
     }
     setIsLoading(true);
     getMyTeams(token)
-      .then((all) => {
-        const eligibleIds = getTackTeamIds(token);
-        const myTeams = all.filter((t) => eligibleIds.includes(t.id));
+      .then((myTeams) => {
+        // Every team the user belongs to, full stop -- no per-team `tack`
+        // product-slug filtering. See auth-api.ts's TeamClaim doc comment.
         setTeams(myTeams);
         // Restore persisted active team, validating it's still in the list.
         try {

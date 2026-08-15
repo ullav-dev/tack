@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
 import { useRouter } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTranslations } from "next-intl";
@@ -43,7 +42,6 @@ function ErrorBox({ message }: { message: string }) {
 function LoginPageContent() {
   const { user, isLoading, login } = useAuth();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const t = useTranslations("login");
 
   const [stage, setStage] = useState<"form" | "reset-request">("form");
@@ -59,16 +57,9 @@ function LoginPageContent() {
     if (!isLoading && user) router.replace("/");
   }, [isLoading, user, router]);
 
-  useEffect(() => {
-    if (searchParams.get("error") === "no_access") {
-      setError(t("errors.noAccessQuery"));
-    }
-  }, [searchParams, t]);
-
   function errMsg(err: unknown, fallback: string): string {
     const msg = err instanceof Error ? err.message : "";
     if (/^HTTP 5/.test(msg)) return t("errors.serverError");
-    if (msg === "no_tack_access") return t("errors.noAccess");
     return msg || fallback;
   }
 

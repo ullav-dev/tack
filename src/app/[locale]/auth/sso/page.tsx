@@ -3,13 +3,14 @@
 // SSO handoff page — called by ullav-portal when launching this app.
 // URL format: /en/auth/sso?t=<encoded-session>
 //
-// Enforces the team-level Tack access gate: the token must include at least
-// one team with the "tack" product enabled.
+// No team-level access gate here (removed, not an oversight) -- Tack backs
+// Notes/Pages for every other first-party app now, so any team the caller
+// belongs to is usable. See auth-api.ts's TeamClaim doc comment and
+// tack-server's own CLAUDE.md "No per-team tack product-slug gate" entry.
 
 import { useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import type { AuthUser } from "@/lib/auth-api";
-import { hasTackAccess, isAdmin } from "@/lib/auth-api";
 import { useAuth } from "@/contexts/AuthContext";
 
 function SsoHandler() {
@@ -23,7 +24,6 @@ function SsoHandler() {
     try {
       const session = JSON.parse(decodeURIComponent(raw)) as { token: string; user: AuthUser; roles: string[] };
       if (!session.token || !session.user || !session.roles) throw new Error("invalid");
-      if (!hasTackAccess(session.token) && !isAdmin(session.token)) { router.replace("/login?error=no_access"); return; }
       setSession(session);
       router.replace("/");
     } catch {

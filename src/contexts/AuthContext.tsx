@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import type { AuthUser, LoginResponse } from "@/lib/auth-api";
-import { login as apiLogin, hasTackAccess } from "@/lib/auth-api";
+import { login as apiLogin } from "@/lib/auth-api";
 
 interface AuthState {
   user: AuthUser | null;
@@ -142,9 +142,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (email: string, password: string): Promise<LoginResponse> => {
     const resp = await apiLogin(email, password);
-    if (!hasTackAccess(resp.token)) {
-      throw new Error("no_tack_access");
-    }
     setSession({ token: resp.token, user: resp.user, roles: resp.roles });
     return resp;
   }, [setSession]);
