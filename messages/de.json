@@ -158,8 +158,6 @@
     "checkInbox": "Prüfen Sie Ihren Posteingang für den Passwort-Reset-Link.",
     "errors": {
       "serverError": "Serverfehler. Bitte versuchen Sie es erneut.",
-      "noAccess": "Ihr Konto hat keinen Zugriff auf Tack.",
-      "noAccessQuery": "Ihr Konto hat keinen Zugriff auf Tack. Bitten Sie Ihren Teambesitzer, Tack für Ihr Team zu aktivieren.",
       "loginFailed": "Anmeldung fehlgeschlagen. Bitte überprüfen Sie Ihre Zugangsdaten.",
       "resetFailed": "Reset-Link konnte nicht gesendet werden."
     }

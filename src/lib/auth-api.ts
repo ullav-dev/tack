@@ -75,14 +75,20 @@ export const confirmPasswordReset = (token: string, new_password: string): Promi
     body: JSON.stringify({ token, new_password }),
   });
 
-// ── Team-level product access ─────────────────────────────────────────────────
+// ── Team claims ──────────────────────────────────────────────────────────────
 
 export interface TeamClaim {
   name: string;
   role: string;
   team_roles: string[];
   product_roles: Record<string, string>;
-  products: string[];
+  // No `products: string[]` field here (deliberately, not an oversight) --
+  // this app no longer reads it. See tack-server's own auth.rs and its
+  // CLAUDE.md "No per-team tack product-slug gate" entry: Tack backs
+  // Notes/Pages for every other first-party app now, so a per-team `tack`
+  // product-slug gate stopped representing a real access decision and was
+  // removed there too. The token may still carry the field; TS structural
+  // typing means simply not declaring it here is enough to stop reading it.
 }
 
 export function getTeamClaims(token: string | null): Record<string, TeamClaim> {
@@ -92,26 +98,12 @@ export function getTeamClaims(token: string | null): Record<string, TeamClaim> {
   return (payload.teams ?? {}) as Record<string, TeamClaim>;
 }
 
-/** Tack access: the `tack` product enabled on at least one of the user's teams. */
-export function hasTackAccess(token: string | null): boolean {
-  const teams = getTeamClaims(token);
-  return Object.values(teams).some((t) => (t.products ?? []).includes("tack"));
-}
-
 /** Returns the current user's team role names for a given team (from JWT claims).
  *  Note: the JWT `team_roles` field stores role names, not UUIDs. */
 export function getUserTeamRoleNames(token: string | null, teamId: string | null): string[] {
   if (!token || !teamId) return [];
   const claims = getTeamClaims(token);
   return claims[teamId]?.team_roles ?? [];
-}
-
-/** Returns IDs of teams that grant Tack access. */
-export function getTackTeamIds(token: string | null): string[] {
-  const teams = getTeamClaims(token);
-  return Object.entries(teams)
-    .filter(([, t]) => (t.products ?? []).includes("tack"))
-    .map(([id]) => id);
 }
 
 export function isAdmin(token: string | null): boolean {

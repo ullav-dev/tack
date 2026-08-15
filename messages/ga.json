@@ -158,8 +158,6 @@
     "checkInbox": "Seiceáil do bhosca isteach le haghaidh an naisc athshocraithe pasfhocail.",
     "errors": {
       "serverError": "Earráid freastalaí. Bain triail as arís.",
-      "noAccess": "Níl rochtain ag do chuntas ar Tack.",
-      "noAccessQuery": "Níl rochtain ag do chuntas ar Tack. Iarr ar úinéir d'fhoirne Tack a chumasú do d'fhoireann.",
       "loginFailed": "Theip ar an síniú isteach. Seiceáil do dhintiúir.",
       "resetFailed": "Níorbh fhéidir an nasc athshocraithe a sheoladh."
     }
