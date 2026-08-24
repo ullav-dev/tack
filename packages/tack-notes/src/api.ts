@@ -90,8 +90,12 @@ export interface AttachRequest {
 }
 
 export interface TackNotesApi {
+  /** Omit `teamId` to list the caller's own personal (team-less) notes
+   * instead of a team's -- see tack-server's `GET /notes` doc comment.
+   * `folderId`/`unfiled`/`filterKey` are meaningless without a team (a
+   * personal note can never be filed) and are ignored in that mode. */
   listNotes(
-    teamId: string,
+    teamId: string | undefined,
     opts?: {
       limit?: number;
       offset?: number;
@@ -108,8 +112,12 @@ export interface TackNotesApi {
     }
   ): Promise<NotesPage>;
   getNote(id: string): Promise<Note>;
+  /** Omit `team_id` for a genuinely personal, team-less note -- only valid
+   * with `visibility: "private"` (tack-server 400s otherwise; see
+   * `CreateNoteRequest::team_id`'s doc comment there). `folder_id` is
+   * rejected too -- a team-less note can never be filed. */
   createNote(payload: {
-    team_id: string;
+    team_id?: string;
     visibility: Visibility;
     title: string;
     body_markdown: string;
@@ -186,11 +194,17 @@ export function createTackNotesApi(base: string, token: string): TackNotesApi {
 
   return {
     listNotes(teamId, opts = {}) {
-      const params = new URLSearchParams({ team_id: teamId });
+      const params = new URLSearchParams();
+      if (teamId) {
+        params.set("team_id", teamId);
+        if (opts.folderId) params.set("folder_id", opts.folderId);
+        else if (opts.unfiled) params.set("unfiled", "true");
+      }
+      // folderId/unfiled are silently dropped when teamId is omitted --
+      // matches tack-server's own "meaningless without a team" rule rather
+      // than sending a query the server would 400 on.
       if (opts.limit !== undefined) params.set("limit", String(opts.limit));
       if (opts.offset !== undefined) params.set("offset", String(opts.offset));
-      if (opts.folderId) params.set("folder_id", opts.folderId);
-      else if (opts.unfiled) params.set("unfiled", "true");
       // opts.filterKey is a host-adapter-only concern -- tack-server has no
       // such filter, so it's deliberately never added to the query string.
       return req(`/notes?${params.toString()}`);
