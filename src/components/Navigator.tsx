@@ -6,7 +6,7 @@ import { Link, useRouter } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTeam } from "@/contexts/TeamContext";
-import { useNoteEvents, TackNoteTree, createTackNotesApi } from "@ullav-dev/tack-notes";
+import { useNoteEvents, TackNoteTree, TackPersonalNotesList, createTackNotesApi } from "@ullav-dev/tack-notes";
 import {
   createSpace,
   listNoteFolders,
@@ -104,6 +104,12 @@ export default function Navigator() {
   const api = useMemo(() => (token ? createTackNotesApi("/api", token) : null), [token]);
 
   const [activeTab, setActiveTabState] = useState<NavigatorTab>(loadStoredTab);
+  // Personal notes have no team at all (tack-server's GET /notes personal
+  // mode -- team_id omitted), so this section is never gated on activeTeam
+  // the way TackNoteTree below it is. Collapsed by default: most days a
+  // caller only cares about their active team's notes, same "don't fetch
+  // what isn't expanded" posture NoteTree already has for its own folders.
+  const [personalExpanded, setPersonalExpanded] = useState(false);
 
   const [spaces, setSpaces] = useState<Space[] | null>(null);
   const [spacesTotal, setSpacesTotal] = useState(0);
@@ -387,19 +393,52 @@ export default function Navigator() {
               <RefreshControl onRefresh={triggerRefresh} storageKey="tack_notes_refresh_interval" />
             </div>
             {api && (
-              <TackNoteTree
-                api={api}
-                teamId={activeTeam?.id ?? null}
-                selectedNoteId={params.noteId}
-                buildNoteHref={(noteId) => `/notes/${noteId}`}
-                onNavigate={(noteId) => router.push(`/notes/${noteId}`)}
-                LinkComponent={Link}
-                t={t}
-                tNotes={tNotes}
-                ImagePicker={TackNotesImagePicker}
-                revealRequest={revealRequest}
-                onRevealed={() => setRevealRequest(null)}
-              />
+              <>
+                {/* Personal (team-less) notes -- always available regardless
+                    of the active team, same virtual-top-level-row treatment
+                    as NoteTree's own "Default" folder, but rendered above
+                    the team tree rather than inside it: a personal note has
+                    no team, so it doesn't belong under any particular
+                    team's own browsing scope. */}
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setPersonalExpanded((v) => !v)}
+                    className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-sm font-medium text-slate-700 hover:bg-slate-100"
+                  >
+                    <span className="shrink-0 w-3 text-xs text-slate-400">{personalExpanded ? "▾" : "▸"}</span>
+                    <span className="shrink-0 text-slate-400">{personalExpanded ? folderOpenIcon : folderIcon}</span>
+                    <span className="truncate">{t("personalNotes")}</span>
+                  </button>
+                  {personalExpanded && (
+                    <div className="ml-4 border-l-2 border-slate-200 pl-2">
+                      <TackPersonalNotesList
+                        api={api}
+                        selectedNoteId={params.noteId}
+                        buildNoteHref={(noteId) => `/notes/${noteId}`}
+                        onNavigate={(noteId) => router.push(`/notes/${noteId}`)}
+                        LinkComponent={Link}
+                        t={t}
+                        tNotes={tNotes}
+                        ImagePicker={TackNotesImagePicker}
+                      />
+                    </div>
+                  )}
+                </div>
+                <TackNoteTree
+                  api={api}
+                  teamId={activeTeam?.id ?? null}
+                  selectedNoteId={params.noteId}
+                  buildNoteHref={(noteId) => `/notes/${noteId}`}
+                  onNavigate={(noteId) => router.push(`/notes/${noteId}`)}
+                  LinkComponent={Link}
+                  t={t}
+                  tNotes={tNotes}
+                  ImagePicker={TackNotesImagePicker}
+                  revealRequest={revealRequest}
+                  onRevealed={() => setRevealRequest(null)}
+                />
+              </>
             )}
           </div>
         ) : (

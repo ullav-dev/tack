@@ -4,6 +4,9 @@ export type { TackNoteThreadProps } from "./TackNoteThread";
 export { default as TackNoteTree } from "./TackNoteTree";
 export type { TackNoteTreeProps } from "./TackNoteTree";
 
+export { default as TackPersonalNotesList } from "./TackPersonalNotesList";
+export type { TackPersonalNotesListProps } from "./TackPersonalNotesList";
+
 export { default as TackNotesPanel } from "./TackNotesPanel";
 export type { TackNotesPanelProps, FilterChip } from "./TackNotesPanel";
 
